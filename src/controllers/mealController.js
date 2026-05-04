@@ -15,9 +15,9 @@ async function suggest(req, res) {
 async function analyzeExternal(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const { description } = req.body;
+    const { description, mealTime } = req.body;
     if (!description) return res.status(400).json({ ok: false, error: 'Descripción requerida' });
-    const meal = await mealService.analyzeExternal({ userId, description });
+    const meal = await mealService.analyzeExternal({ userId, description, mealTime });
     res.json({ ok: true, meal });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

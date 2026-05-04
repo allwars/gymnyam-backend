@@ -81,11 +81,15 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
       "calories_per_100g": 100,
       "protein_per_100g": 5,
       "carbs_per_100g": 20,
-      "fat_per_100g": 3
+      "fat_per_100g": 3,
+      "fiber_per_100g": 2,
+      "sugar_per_100g": 4,
+      "has_preservatives": false
     }
   ],
   "summary": "string"
 }
+"has_preservatives": true si es un producto procesado/envasado con aditivos o conservantes (E-xxx). false si es fresco, natural o sin procesar.
 Identifica el máximo de alimentos posibles. Si no puedes leer una cantidad, pon null.`;
 
   console.log(`[Vision] Escaneando nevera/despensa con ${VISION_MODEL}...`);

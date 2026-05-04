@@ -28,14 +28,15 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
 }
 
 async function analyzeExternalMeal({ user, description, synergy, workoutContext }) {
-  const system = `Eres un dietista experto. Analiza comidas y da su valor nutricional estimado.
+  const system = `Eres un dietista experto. Analiza comidas y da su valor nutricional estimado completo.
 Responde ÚNICAMENTE con JSON válido, sin texto adicional:
 {
-  "foods": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5}],
-  "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10},
+  "foods": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "fiber": 2, "sugar": 3, "has_preservatives": false}],
+  "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10, "total_fiber": 8, "total_sugar": 12},
   "advice": "string",
   "score": 7
-}`;
+}
+"has_preservatives": true si el alimento es procesado y contiene aditivos/conservantes (E-xxx). false si es fresco o natural.`;
 
   const context = [
     `Perfil: objetivo ${user.goal}, peso ${user.weight}kg`,
@@ -79,10 +80,10 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
       "name": "Nombre concreto del plato (ej: 'Tortilla de patatas', 'Pasta con tomate y atún')",
       "emoji": "🍳",
       "description": "Descripción breve en 1 frase",
-      "ingredients": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5}],
+      "ingredients": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "fiber": 2, "sugar": 3, "has_preservatives": false}],
       "recipe_steps": ["Paso 1...", "Paso 2...", "Paso 3..."],
       "prep_time": "15 min",
-      "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10},
+      "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10, "total_fiber": 8, "total_sugar": 12},
       "score": 8,
       "uses_pantry": true
     }
