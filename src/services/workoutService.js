@@ -31,15 +31,24 @@ async function generateAndSave({ userId, sport, level }) {
     mealContext,
   });
 
-  return workoutRepo.saveWorkout({
+  const saved = await workoutRepo.saveWorkout({
     user_id: userId,
     sport: resolvedSport,
     warmup: plan.warmup,
     exercises: plan.exercises,
     stretching: plan.stretching,
     summary: plan.summary,
+    difficulty: plan.difficulty || resolvedLevel,
+    estimated_duration: plan.estimated_duration || null,
     notes: null,
   });
+
+  // Garantizamos que difficulty y estimated_duration siempre están en la respuesta
+  return {
+    ...saved,
+    difficulty: saved.difficulty || plan.difficulty || resolvedLevel,
+    estimated_duration: saved.estimated_duration || plan.estimated_duration || null,
+  };
 }
 
 async function getHistory(userId, limit) {
