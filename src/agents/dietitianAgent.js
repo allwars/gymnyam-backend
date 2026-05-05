@@ -108,4 +108,36 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
   return chat(system, `Sugiere 3 platos caseros y realistas para ahora.\n${context}`, 2000);
 }
 
-module.exports = { suggestMeal, analyzeExternalMeal, analyzePantry, suggestDishes };
+async function lookupFoodNutrition({ foodName }) {
+  const system = `Eres un experto nutricionista. Proporciona datos nutricionales precisos de alimentos.
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta estructura exacta:
+{
+  "calories_per_100g": 0,
+  "protein_per_100g": 0,
+  "carbs_per_100g": 0,
+  "fat_per_100g": 0,
+  "saturated_fat_per_100g": 0,
+  "fiber_per_100g": 0,
+  "sugar_per_100g": 0,
+  "salt_per_100g": 0,
+  "has_preservatives": false,
+  "additives_count": 0,
+  "score": 0,
+  "score_label": "Bueno",
+  "positive_points": [
+    { "icon": "🥩", "label": "string", "description": "string", "value": "string", "color": "green" }
+  ],
+  "negative_points": [
+    { "icon": "⚠️", "label": "string", "description": "string", "value": "string", "color": "red" }
+  ]
+}
+Reglas para score (0-100): empieza en 50, +20 si proteína>15g, +10 si fibra>3g, +10 si sin conservantes, -15 si azúcar>20g, -15 si grasas saturadas>5g, -10 si sal>1.5g, -20 si aditivos>5, máx 100 mín 0.
+score_label: 0-39="Malo", 40-59="Mediocre", 60-74="Bueno", 75-100="Excelente".
+En positive_points incluye solo los valores nuticionalmente buenos (proteína alta, fibra alta, sin conservantes, bajo en azúcar, bajo en sal, bajo en grasa saturada). color siempre "green".
+En negative_points incluye solo los problemas (calorías altas >400, grasa saturada alta, azúcar alta, sal alta, conservantes/aditivos). color: "red" si muy malo, "orange" si moderado.
+Iconos sugeridos: proteínas=🥩, fibra=🌿, azúcar=🍬, grasa=💧, grasa saturada=🫧, sal=🧂, calorías=🔥, aditivos=⚗️, natural=✅, energía=⚡`;
+
+  return chat(system, `Analiza este alimento y devuelve sus datos nutricionales completos: "${foodName}"`, 1200);
+}
+
+module.exports = { suggestMeal, analyzeExternalMeal, analyzePantry, suggestDishes, lookupFoodNutrition };
