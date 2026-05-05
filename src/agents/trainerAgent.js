@@ -1,6 +1,6 @@
 const { chat } = require('./client');
 
-async function generateWorkout({ user, history, sport, synergy, mealContext }) {
+async function generateWorkout({ user, history, sport, level, synergy, mealContext }) {
   const hasHistory = history && history.length > 0;
 
   const system = `Eres un entrenador personal experto. Genera planes de entrenamiento personalizados y seguros.
@@ -18,6 +18,7 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta estructura 
     `Perfil: edad ${user.age}, sexo ${user.sex}, peso ${user.weight}kg, objetivo: ${user.goal}, sueño: ${user.sleep_hours}h`,
     user.injuries ? `Lesiones/limitaciones: ${user.injuries}` : '',
     sport ? `Deporte a entrenar: ${sport}` : '',
+    level ? `Nivel del usuario en este deporte: ${level}. Adapta la dificultad, cargas y volumen de ejercicios a este nivel. Principiante = ejercicios básicos, pesos ligeros, más descanso. Intermedio = progresión moderada. Avanzado = alta intensidad, técnica avanzada, poco descanso.` : '',
     hasHistory
       ? `Últimos entrenos (para progresión y contexto):\n${history.slice(0, 3).map(h =>
           `- ${h.sport || 'entreno'} (${h.date}): ${h.exercises?.length || 0} ejercicios, dificultad: ${h.difficulty || '?'}${h.notes ? ` | Notas del usuario: "${h.notes.replace(/\[audio:.*?\]/g, '[nota de voz]').substring(0, 200)}"` : ''}`
