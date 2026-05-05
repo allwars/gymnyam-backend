@@ -4,7 +4,7 @@ const mealRepo = require('../repositories/mealRepository');
 const userRepo = require('../repositories/userRepository');
 const supabase = require('../db/supabase');
 
-async function generateAndSave({ userId, sport }) {
+async function generateAndSave({ userId, sport, level }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
 
@@ -16,17 +16,24 @@ async function generateAndSave({ userId, sport }) {
     mealContext = allMeals.filter(m => String(m.date).split('T')[0] === today);
   }
 
+  const resolvedSport = sport || (user.sports?.[0]?.name);
+  // Si no viene level del frontend, intentar sacarlo del perfil del usuario
+  const resolvedLevel = level
+    || (user.sports?.find(s => s.name === resolvedSport)?.level)
+    || 'Intermedio';
+
   const plan = await generateWorkout({
     user,
     history,
-    sport: sport || (user.sports?.[0]?.name),
+    sport: resolvedSport,
+    level: resolvedLevel,
     synergy: !!user.synergy_enabled,
     mealContext,
   });
 
   return workoutRepo.saveWorkout({
     user_id: userId,
-    sport: sport || (user.sports?.[0]?.name),
+    sport: resolvedSport,
     warmup: plan.warmup,
     exercises: plan.exercises,
     stretching: plan.stretching,

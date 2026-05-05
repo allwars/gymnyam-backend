@@ -47,7 +47,7 @@ async function suggest({ userId, mealTime }) {
   });
 }
 
-async function analyzeExternal({ userId, description }) {
+async function analyzeExternal({ userId, description, mealTime }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
 
@@ -67,7 +67,7 @@ async function analyzeExternal({ userId, description }) {
 
   return mealRepo.saveMeal({
     user_id: userId,
-    meal_time: getCurrentMealTime(),
+    meal_time: mealTime || getCurrentMealTime(),
     type: 'external',
     foods: analysis.foods,
     nutritional_info: analysis.nutritional_info,
