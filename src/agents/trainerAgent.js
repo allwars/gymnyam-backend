@@ -3,6 +3,7 @@ const { chat } = require('./client');
 async function generateWorkout({ user, history, sport, level, synergy, mealContext }) {
   const hasHistory = history && history.length > 0;
 
+  const difficultyValue = level || 'Intermedio';
   const system = `Eres un entrenador personal experto. Genera planes de entrenamiento personalizados y seguros.
 Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta estructura exacta:
 {
@@ -10,9 +11,10 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta estructura 
   "exercises": [{"name": "string", "sets": 3, "reps": "string", "weight": "string", "rest": "string", "tips": "string"}],
   "stretching": [{"exercise": "string", "duration": "string", "muscle": "string"}],
   "summary": "string",
-  "difficulty": "string",
+  "difficulty": "${difficultyValue}",
   "estimated_duration": "string"
-}`;
+}
+IMPORTANTE: el campo "difficulty" DEBE ser exactamente "${difficultyValue}" tal como se indica arriba.`;
 
   const context = [
     `Perfil: edad ${user.age}, sexo ${user.sex}, peso ${user.weight}kg, objetivo: ${user.goal}, sueño: ${user.sleep_hours}h`,
