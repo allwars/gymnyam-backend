@@ -10,5 +10,6 @@ router.patch('/:id/sports', ctrl.updateSports);
 router.patch('/:id/goal', ctrl.updateGoal);
 router.patch('/:id/profile', ctrl.updateProfile);
 router.patch('/:id/diet', ctrl.updateDiet);
+router.delete('/:id', ctrl.deleteAccount);
 
 module.exports = router;

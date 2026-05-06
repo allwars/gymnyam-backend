@@ -73,13 +73,25 @@ async function updateGoal(userId, goal) {
 }
 
 async function updateProfile(userId, data) {
-  const allowed = ['name','age','sex','weight','height','goal','sleep_hours','injuries','allergies'];
+  const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies'];
   const update = Object.fromEntries(Object.entries(data).filter(([k, v]) => allowed.includes(k) && v !== undefined));
   if (!Object.keys(update).length) return getUserById(userId);
   const { data: user, error } = await supabase
     .from('users').update(update).eq('id', userId).select('*, sports(*)').single();
   if (error) throw new Error(error.message);
   return user;
+}
+
+async function deleteUser(userId) {
+  // Borrar datos relacionados primero
+  await supabase.from('sports').delete().eq('user_id', userId);
+  await supabase.from('meals').delete().eq('user_id', userId);
+  await supabase.from('workouts').delete().eq('user_id', userId);
+  await supabase.from('pantry_items').delete().eq('user_id', userId);
+  // Borrar usuario
+  const { error } = await supabase.from('users').delete().eq('id', userId);
+  if (error) throw new Error(error.message);
+  return true;
 }
 
 async function updateDiet(userId, dietData) {
@@ -92,4 +104,4 @@ async function updateDiet(userId, dietData) {
   return user;
 }
 
-module.exports = { createUser, getUserById, getUserByEmail, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet };
+module.exports = { createUser, getUserById, getUserByEmail, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet, deleteUser };

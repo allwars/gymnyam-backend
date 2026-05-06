@@ -97,14 +97,24 @@ async function updateGoal(req, res) {
 async function updateProfile(req, res) {
   try {
     const userId = Number(req.params.id);
-    const { name, age, sex, weight, height, goal, sleep_hours, injuries, allergies } = req.body;
+    const { name, age, sex, birth_date, weight, height, goal, sleep_hours, injuries, allergies } = req.body;
     if (height !== undefined && (isNaN(height) || height < 50 || height > 250))
       return res.status(400).json({ ok: false, error: 'Altura invalida (50-250 cm).' });
     if (weight !== undefined && (isNaN(weight) || weight < 20 || weight > 500))
       return res.status(400).json({ ok: false, error: 'Peso invalido (20-500 kg).' });
-    const user = await userService.updateProfile(userId, { name, age, sex, weight, height, goal, sleep_hours, injuries, allergies });
+    const user = await userService.updateProfile(userId, { name, age, sex, birth_date, weight, height, goal, sleep_hours, injuries, allergies });
     if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
     res.json({ ok: true, user });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+async function deleteAccount(req, res) {
+  try {
+    const userId = Number(req.params.id);
+    await userService.deleteAccount(userId);
+    res.json({ ok: true, message: 'Cuenta eliminada correctamente.' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -136,4 +146,4 @@ async function updateDiet(req, res) {
   }
 }
 
-module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet };
+module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount };
