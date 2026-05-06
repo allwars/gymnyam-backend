@@ -1,55 +1,47 @@
-const { getDb, runTransaction } = require('../db/database');
+const supabase = require('../db/supabase');
 
-function addItem(data) {
-  return runTransaction(() => {
-    const db = getDb();
-    const ni = typeof data.nutritional_info === 'string' ? data.nutritional_info : JSON.stringify(data.nutritional_info || {});
-    const result = db.prepare(
-      'INSERT INTO pantry (user_id, name, quantity, nutritional_info, added_by) VALUES (?, ?, ?, ?, ?)'
-    ).run(data.user_id, data.name, data.quantity || null, ni, data.added_by || 'manual');
-    return getItemById(result.lastInsertRowid);
-  });
+async function addItem(data) {
+  const { data: item, error } = await supabase
+    .from('pantry')
+    .insert({
+      user_id: data.user_id,
+      name: data.name,
+      quantity: data.quantity || null,
+      nutritional_info: data.nutritional_info || {},
+      added_by: data.added_by || 'manual',
+    })
+    .select().single();
+  if (error) throw new Error(error.message);
+  return item;
 }
 
-function getItemById(id) {
-  const item = getDb().prepare('SELECT * FROM pantry WHERE id = ?').get(id);
-  return item ? parseItem(item) : null;
+async function getItemById(id) {
+  const { data, error } = await supabase.from('pantry').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return data;
 }
 
-function getPantryByUser(userId) {
-  return getDb().prepare('SELECT * FROM pantry WHERE user_id = ? ORDER BY name ASC').all(userId).map(parseItem);
+async function getPantryByUser(userId) {
+  const { data, error } = await supabase
+    .from('pantry').select('*').eq('user_id', userId).order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-function deleteItem(id, userId) {
-  return getDb().prepare('DELETE FROM pantry WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+async function deleteItem(id, userId) {
+  await supabase.from('pantry').delete().eq('id', id).eq('user_id', userId);
 }
 
-function updateItem(id, userId, data) {
-  return runTransaction(() => {
-    const sets = [];
-    const values = [];
-    if (data.name !== undefined) { sets.push('name = ?'); values.push(data.name); }
-    if (data.quantity !== undefined) { sets.push('quantity = ?'); values.push(data.quantity); }
-    if (data.nutritional_info !== undefined) {
-      sets.push('nutritional_info = ?');
-      values.push(typeof data.nutritional_info === 'string' ? data.nutritional_info : JSON.stringify(data.nutritional_info));
-    }
-    if (!sets.length) return getItemById(id);
-    getDb().prepare('UPDATE pantry SET ' + sets.join(', ') + ' WHERE id = ? AND user_id = ?').run(...values, id, userId);
-    return getItemById(id);
-  });
-}
-
-function parseItem(item) {
-  return Object.assign({}, item, {
-    nutritional_info: tryParse(item.nutritional_info, {}),
-  });
-}
-
-function tryParse(val, fallback) {
-  if (!val) return fallback;
-  if (typeof val !== 'string') return val;
-  try { return JSON.parse(val); } catch (_) { return fallback; }
+async function updateItem(id, userId, data) {
+  const update = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.quantity !== undefined) update.quantity = data.quantity;
+  if (data.nutritional_info !== undefined) update.nutritional_info = data.nutritional_info;
+  if (!Object.keys(update).length) return getItemById(id);
+  const { data: item, error } = await supabase
+    .from('pantry').update(update).eq('id', id).eq('user_id', userId).select().single();
+  if (error) throw new Error(error.message);
+  return item;
 }
 
 module.exports = { addItem, getItemById, getPantryByUser, deleteItem, updateItem };

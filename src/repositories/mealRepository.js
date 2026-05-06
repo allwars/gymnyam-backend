@@ -1,59 +1,56 @@
-const { getDb, runTransaction } = require('../db/database');
+const supabase = require('../db/supabase');
 const analytics = require('./analyticsRepository');
 
-function saveMeal(data) {
-  return runTransaction(() => {
-    const db = getDb();
-    const foods = typeof data.foods === 'string' ? data.foods : JSON.stringify(data.foods || []);
-    const ni = typeof data.nutritional_info === 'string' ? data.nutritional_info : JSON.stringify(data.nutritional_info || {});
-    const result = db.prepare(
-      'INSERT INTO meals (user_id, meal_time, type, foods, nutritional_info, advice, score, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(data.user_id, data.meal_time, data.type, foods, ni, data.advice || null, data.score || null, data.date || new Date().toISOString().split('T')[0]);
-    try {
-      const foodsArr = Array.isArray(data.foods) ? data.foods : JSON.parse(foods);
-      analytics.incrementFoods(foodsArr);
-    } catch (_) {}
-    return getMealById(result.lastInsertRowid);
-  });
+async function saveMeal(data) {
+  const { data: meal, error } = await supabase
+    .from('meals')
+    .insert({
+      user_id: data.user_id,
+      meal_time: data.meal_time,
+      type: data.type,
+      foods: data.foods || [],
+      nutritional_info: data.nutritional_info || {},
+      advice: data.advice || null,
+      score: data.score || null,
+      date: data.date || new Date().toISOString().split('T')[0],
+    })
+    .select().single();
+  if (error) throw new Error(error.message);
+  try {
+    const foodsArr = Array.isArray(data.foods) ? data.foods : [];
+    analytics.incrementFoods(foodsArr);
+  } catch (_) {}
+  return meal;
 }
 
-function getMealById(id) {
-  const meal = getDb().prepare('SELECT * FROM meals WHERE id = ?').get(id);
-  return meal ? parseMeal(meal) : null;
+async function getMealById(id) {
+  const { data, error } = await supabase.from('meals').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return data;
 }
 
-function getMealsByUser(userId, limit) {
-  limit = limit || 30;
-  return getDb().prepare('SELECT * FROM meals WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT ?').all(userId, limit).map(parseMeal);
+async function getMealsByUser(userId, limit = 30) {
+  const { data, error } = await supabase
+    .from('meals').select('*').eq('user_id', userId)
+    .order('date', { ascending: false }).order('id', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-function deleteMeal(id, userId) {
-  return getDb().prepare('DELETE FROM meals WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+async function deleteMeal(id, userId) {
+  await supabase.from('meals').delete().eq('id', id).eq('user_id', userId);
 }
 
-function updateMeal(id, userId, data) {
-  return runTransaction(() => {
-    const sets = [];
-    const values = [];
-    if (data.meal_time !== undefined) { sets.push('meal_time = ?'); values.push(data.meal_time); }
-    if (data.advice !== undefined) { sets.push('advice = ?'); values.push(data.advice); }
-    if (!sets.length) return getMealById(id);
-    getDb().prepare('UPDATE meals SET ' + sets.join(', ') + ' WHERE id = ? AND user_id = ?').run(...values, id, userId);
-    return getMealById(id);
-  });
-}
-
-function parseMeal(meal) {
-  return Object.assign({}, meal, {
-    foods: tryParse(meal.foods, []),
-    nutritional_info: tryParse(meal.nutritional_info, {}),
-  });
-}
-
-function tryParse(val, fallback) {
-  if (!val) return fallback;
-  if (typeof val !== 'string') return val;
-  try { return JSON.parse(val); } catch (_) { return fallback; }
+async function updateMeal(id, userId, data) {
+  const update = {};
+  if (data.meal_time !== undefined) update.meal_time = data.meal_time;
+  if (data.advice !== undefined) update.advice = data.advice;
+  if (!Object.keys(update).length) return getMealById(id);
+  const { data: meal, error } = await supabase
+    .from('meals').update(update).eq('id', id).eq('user_id', userId).select().single();
+  if (error) throw new Error(error.message);
+  return meal;
 }
 
 module.exports = { saveMeal, getMealById, getMealsByUser, deleteMeal, updateMeal };

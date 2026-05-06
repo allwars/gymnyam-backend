@@ -1,65 +1,60 @@
-const { getDb, runTransaction } = require('../db/database');
+const supabase = require('../db/supabase');
 const analytics = require('./analyticsRepository');
 
-function saveWorkout(data) {
-  return runTransaction(() => {
-    const db = getDb();
-    const warmup = typeof data.warmup === 'string' ? data.warmup : JSON.stringify(data.warmup || []);
-    const exercises = typeof data.exercises === 'string' ? data.exercises : JSON.stringify(data.exercises || []);
-    const stretching = typeof data.stretching === 'string' ? data.stretching : JSON.stringify(data.stretching || []);
-    const result = db.prepare(
-      'INSERT INTO workouts (user_id, sport, warmup, exercises, stretching, summary, notes, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(data.user_id, data.sport || null, warmup, exercises, stretching, data.summary || null, data.notes || null, data.date || new Date().toISOString().split('T')[0]);
-    try {
-      if (data.sport) analytics.incrementSport(data.sport);
-      const exArr = Array.isArray(data.exercises) ? data.exercises : JSON.parse(exercises);
-      for (const ex of exArr) { if (ex.name) analytics.incrementExercise(ex.name); }
-    } catch (_) {}
-    return getWorkoutById(result.lastInsertRowid);
-  });
+async function saveWorkout(data) {
+  const { data: workout, error } = await supabase
+    .from('workouts')
+    .insert({
+      user_id: data.user_id,
+      sport: data.sport || null,
+      warmup: data.warmup || [],
+      exercises: data.exercises || [],
+      stretching: data.stretching || [],
+      summary: data.summary || null,
+      notes: data.notes || null,
+      date: data.date || new Date().toISOString().split('T')[0],
+    })
+    .select().single();
+  if (error) throw new Error(error.message);
+  try {
+    if (data.sport) analytics.incrementSport(data.sport);
+    const exArr = Array.isArray(data.exercises) ? data.exercises : [];
+    for (const ex of exArr) { if (ex.name) analytics.incrementExercise(ex.name); }
+  } catch (_) {}
+  return workout;
 }
 
-function getWorkoutById(id) {
-  const w = getDb().prepare('SELECT * FROM workouts WHERE id = ?').get(id);
-  return w ? parseWorkout(w) : null;
+async function getWorkoutById(id) {
+  const { data, error } = await supabase.from('workouts').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return data;
 }
 
-function getWorkoutsByUser(userId, limit) {
-  limit = limit || 20;
-  return getDb().prepare('SELECT * FROM workouts WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT ?').all(userId, limit).map(parseWorkout);
+async function getWorkoutsByUser(userId, limit = 20) {
+  const { data, error } = await supabase
+    .from('workouts').select('*').eq('user_id', userId)
+    .order('date', { ascending: false }).order('id', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-function deleteWorkout(id, userId) {
-  return getDb().prepare('DELETE FROM workouts WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+async function deleteWorkout(id, userId) {
+  const { error } = await supabase.from('workouts').delete().eq('id', id).eq('user_id', userId);
+  return !error;
 }
 
-function updateWorkout(id, userId, data) {
-  return runTransaction(() => {
-    const db = getDb();
-    const sets = [];
-    const values = [];
-    if (data.exercises !== undefined) { sets.push('exercises = ?'); values.push(typeof data.exercises === 'string' ? data.exercises : JSON.stringify(data.exercises)); }
-    if (data.warmup !== undefined) { sets.push('warmup = ?'); values.push(typeof data.warmup === 'string' ? data.warmup : JSON.stringify(data.warmup)); }
-    if (data.stretching !== undefined) { sets.push('stretching = ?'); values.push(typeof data.stretching === 'string' ? data.stretching : JSON.stringify(data.stretching)); }
-    if (data.notes !== undefined) { sets.push('notes = ?'); values.push(data.notes); }
-    if (!sets.length) return getWorkoutById(id);
-    db.prepare('UPDATE workouts SET ' + sets.join(', ') + ' WHERE id = ? AND user_id = ?').run(...values, id, userId);
-    return getWorkoutById(id);
-  });
-}
-
-function parseWorkout(w) {
-  return Object.assign({}, w, {
-    warmup: tryParse(w.warmup, []),
-    exercises: tryParse(w.exercises, []),
-    stretching: tryParse(w.stretching, []),
-  });
-}
-
-function tryParse(val, fallback) {
-  if (!val) return fallback;
-  if (typeof val !== 'string') return val;
-  try { return JSON.parse(val); } catch (_) { return fallback; }
+async function updateWorkout(id, userId, data) {
+  const update = {};
+  if (data.exercises !== undefined) update.exercises = data.exercises;
+  if (data.warmup !== undefined) update.warmup = data.warmup;
+  if (data.stretching !== undefined) update.stretching = data.stretching;
+  if (data.notes !== undefined) update.notes = data.notes;
+  if (!Object.keys(update).length) return getWorkoutById(id);
+  const { data: workout, error } = await supabase
+    .from('workouts').update(update).eq('id', id).eq('user_id', userId).select().single();
+  if (error) throw new Error(error.message);
+  return workout;
 }
 
 module.exports = { saveWorkout, getWorkoutById, getWorkoutsByUser, deleteWorkout, updateWorkout };

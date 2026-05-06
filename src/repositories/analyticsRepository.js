@@ -1,130 +1,74 @@
-const { getDb, runTransaction } = require('../db/database');
+const supabase = require('../db/supabase');
 
-// Clasifica un alimento en su categoría de macro dominante
 function classifyFood(food) {
-  const p = food.protein || 0;
-  const f = food.fat || 0;
-  const c = food.carbs || 0;
-  const s = food.sugar || 0;
-
-  // Si tiene mucho azúcar (>10g por porción o >30% de los carbos)
-  if (s > 10 || (c > 0 && s / c > 0.3)) return 'sugar';
-  const dominant = Math.max(p, f, c);
-  if (dominant === 0) return 'other';
-  if (dominant === p) return 'protein';
-  if (dominant === f) return 'fat';
-  return 'carb';
+  const name = (food.name || '').toLowerCase();
+  const p = food.protein || food.protein_per_100g || 0;
+  const f = food.fat || food.fat_per_100g || 0;
+  const c = food.carbs || food.carbs_per_100g || 0;
+  const s = food.sugar || food.sugar_per_100g || 0;
+  if (s > 10) return 'sugar';
+  if (p >= f && p >= c) return 'protein';
+  if (f >= p && f >= c) return 'fat';
+  if (c >= p && c >= f) return 'carb';
+  return 'other';
 }
 
-function incrementDiet(dietType) {
-  if (!dietType) return;
+async function upsertCounter(table, keyCol, keyVal, extra = {}) {
   try {
-    runTransaction(() => {
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO diet_stats (diet_type, count, updated_at)
-        VALUES (?, 1, datetime('now'))
-        ON CONFLICT(diet_type) DO UPDATE SET count = count + 1, updated_at = datetime('now')
-      `).run(dietType);
-    });
-  } catch (e) { /* analytics no debe romper flujo principal */ }
+    const { data } = await supabase.from(table).select('count').eq(keyCol, keyVal).single();
+    if (data) {
+      await supabase.from(table).update({ count: data.count + 1 }).eq(keyCol, keyVal);
+    } else {
+      await supabase.from(table).insert({ [keyCol]: keyVal, count: 1, ...extra });
+    }
+  } catch (_) {}
 }
 
-function decrementDiet(dietType) {
-  if (!dietType) return;
+async function decrementCounter(table, keyCol, keyVal) {
   try {
-    runTransaction(() => {
-      const db = getDb();
-      db.prepare(`
-        UPDATE diet_stats SET count = MAX(0, count - 1), updated_at = datetime('now')
-        WHERE diet_type = ?
-      `).run(dietType);
-    });
-  } catch (e) {}
+    const { data } = await supabase.from(table).select('count').eq(keyCol, keyVal).single();
+    if (data && data.count > 0) {
+      await supabase.from(table).update({ count: data.count - 1 }).eq(keyCol, keyVal);
+    }
+  } catch (_) {}
 }
 
-function incrementSport(sportName) {
-  if (!sportName) return;
-  try {
-    runTransaction(() => {
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO sport_stats (sport_name, count, updated_at)
-        VALUES (?, 1, datetime('now'))
-        ON CONFLICT(sport_name) DO UPDATE SET count = count + 1, updated_at = datetime('now')
-      `).run(sportName.toLowerCase().trim());
-    });
-  } catch (e) {}
-}
-
-function incrementExercise(exerciseName) {
-  if (!exerciseName) return;
-  try {
-    runTransaction(() => {
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO exercise_stats (exercise_name, count, updated_at)
-        VALUES (?, 1, datetime('now'))
-        ON CONFLICT(exercise_name) DO UPDATE SET count = count + 1, updated_at = datetime('now')
-      `).run(exerciseName.toLowerCase().trim());
-    });
-  } catch (e) {}
-}
+function incrementDiet(dietType) { return upsertCounter('diet_stats', 'diet_type', dietType); }
+function decrementDiet(dietType) { return decrementCounter('diet_stats', 'diet_type', dietType); }
+function incrementSport(sport) { return upsertCounter('sport_stats', 'sport_name', sport); }
+function incrementExercise(exercise) { return upsertCounter('exercise_stats', 'exercise_name', exercise); }
 
 function incrementFoods(foods) {
-  if (!Array.isArray(foods) || !foods.length) return;
-  try {
-    runTransaction(() => {
-      const db = getDb();
-      const stmt = db.prepare(`
-        INSERT INTO food_stats (food_name, category, count, updated_at)
-        VALUES (?, ?, 1, datetime('now'))
-        ON CONFLICT(food_name, category) DO UPDATE SET count = count + 1, updated_at = datetime('now')
-      `);
-      for (const food of foods) {
-        if (!food.name) continue;
-        const category = classifyFood(food);
-        stmt.run(food.name.toLowerCase().trim(), category);
-      }
-    });
-  } catch (e) {}
-}
-
-function getTopDiets(limit = 10) {
-  return getDb().prepare('SELECT diet_type, count FROM diet_stats ORDER BY count DESC LIMIT ?').all(limit);
-}
-
-function getTopSports(limit = 10) {
-  return getDb().prepare('SELECT sport_name, count FROM sport_stats ORDER BY count DESC LIMIT ?').all(limit);
-}
-
-function getTopExercises(limit = 10) {
-  return getDb().prepare('SELECT exercise_name, count FROM exercise_stats ORDER BY count DESC LIMIT ?').all(limit);
-}
-
-function getTopFoodsByCategory(limit = 10) {
-  const db = getDb();
-  const categories = ['protein', 'fat', 'carb', 'sugar', 'other'];
-  const result = {};
-  for (const cat of categories) {
-    result[cat] = db.prepare(
-      'SELECT food_name, count FROM food_stats WHERE category = ? ORDER BY count DESC LIMIT ?'
-    ).all(cat, limit);
+  if (!Array.isArray(foods)) return;
+  for (const food of foods) {
+    if (!food.name) continue;
+    const category = classifyFood(food);
+    try {
+      supabase.from('food_stats').select('count').eq('food_name', food.name).eq('category', category).single()
+        .then(({ data }) => {
+          if (data) {
+            supabase.from('food_stats').update({ count: data.count + 1 }).eq('food_name', food.name).eq('category', category);
+          } else {
+            supabase.from('food_stats').insert({ food_name: food.name, category, count: 1 });
+          }
+        });
+    } catch (_) {}
   }
-  return result;
 }
 
-function getAllStats() {
+async function getAllStats() {
+  const [diets, sports, exercises, foods] = await Promise.all([
+    supabase.from('diet_stats').select('*').order('count', { ascending: false }).limit(10),
+    supabase.from('sport_stats').select('*').order('count', { ascending: false }).limit(10),
+    supabase.from('exercise_stats').select('*').order('count', { ascending: false }).limit(10),
+    supabase.from('food_stats').select('*').order('count', { ascending: false }).limit(40),
+  ]);
   return {
-    diets: getTopDiets(15),
-    sports: getTopSports(15),
-    exercises: getTopExercises(15),
-    foods: getTopFoodsByCategory(10),
+    diets: diets.data || [],
+    sports: sports.data || [],
+    exercises: exercises.data || [],
+    foods: foods.data || [],
   };
 }
 
-module.exports = {
-  incrementDiet, decrementDiet,
-  incrementSport, incrementExercise, incrementFoods,
-  getTopDiets, getTopSports, getTopExercises, getTopFoodsByCategory, getAllStats,
-};
+module.exports = { incrementDiet, decrementDiet, incrementSport, incrementExercise, incrementFoods, getAllStats, classifyFood };
