@@ -14,74 +14,37 @@ function getCurrentMealTime() {
 }
 
 async function suggest({ userId, mealTime }) {
-  const user = await userRepo.getUserById(userId);
+  const user = userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
-
-  const pantry = await pantryRepo.getPantryByUser(userId);
-  const mealHistory = await mealRepo.getMealsByUser(userId, 10);
+  const pantry = pantryRepo.getPantryByUser(userId);
+  const mealHistory = mealRepo.getMealsByUser(userId, 10);
   let workoutContext = null;
-
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
-    const allWorkouts = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = allWorkouts.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = workoutRepo.getWorkoutsByUser(userId, 5).filter(w => String(w.date).split('T')[0] === today);
   }
-
-  const suggestion = await suggestMeal({
-    user,
-    mealTime: mealTime || getCurrentMealTime(),
-    pantry,
-    mealHistory,
-    synergy: !!user.synergy_enabled,
-    workoutContext,
-  });
-
-  return mealRepo.saveMeal({
-    user_id: userId,
-    meal_time: mealTime || getCurrentMealTime(),
-    type: 'suggestion',
-    foods: suggestion.foods,
-    nutritional_info: suggestion.nutritional_info,
-    advice: suggestion.advice,
-    score: suggestion.score,
-  });
+  const suggestion = await suggestMeal({ user, mealTime: mealTime || getCurrentMealTime(), pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext });
+  return mealRepo.saveMeal({ user_id: userId, meal_time: mealTime || getCurrentMealTime(), type: 'suggestion', foods: suggestion.foods, nutritional_info: suggestion.nutritional_info, advice: suggestion.advice, score: suggestion.score });
 }
 
 async function analyzeExternal({ userId, description, mealTime }) {
-  const user = await userRepo.getUserById(userId);
+  const user = userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
-
   let workoutContext = null;
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
-    const allWorkouts = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = allWorkouts.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = workoutRepo.getWorkoutsByUser(userId, 5).filter(w => String(w.date).split('T')[0] === today);
   }
-
-  const analysis = await analyzeExternalMeal({
-    user,
-    description,
-    synergy: !!user.synergy_enabled,
-    workoutContext,
-  });
-
-  return mealRepo.saveMeal({
-    user_id: userId,
-    meal_time: mealTime || getCurrentMealTime(),
-    type: 'external',
-    foods: analysis.foods,
-    nutritional_info: analysis.nutritional_info,
-    advice: analysis.advice,
-    score: analysis.score,
-  });
+  const analysis = await analyzeExternalMeal({ user, description, synergy: !!user.synergy_enabled, workoutContext });
+  return mealRepo.saveMeal({ user_id: userId, meal_time: mealTime || getCurrentMealTime(), type: 'external', foods: analysis.foods, nutritional_info: analysis.nutritional_info, advice: analysis.advice, score: analysis.score });
 }
 
 async function getPantryAnalysis(userId) {
-  const user = await userRepo.getUserById(userId);
+  const user = userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
-  const pantry = await pantryRepo.getPantryByUser(userId);
+  const pantry = pantryRepo.getPantryByUser(userId);
   if (!pantry.length) throw new Error('Añade alimentos a tu despensa antes de analizarla.');
-  const mealHistory = await mealRepo.getMealsByUser(userId, 20);
+  const mealHistory = mealRepo.getMealsByUser(userId, 20);
   return analyzePantry({ user, pantry, mealHistory });
 }
 
@@ -90,41 +53,21 @@ async function getHistory(userId, limit) {
 }
 
 async function getDishSuggestions({ userId, mealTime }) {
-  const user = await userRepo.getUserById(userId);
+  const user = userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
-
-  const pantry = await pantryRepo.getPantryByUser(userId);
-  const mealHistory = await mealRepo.getMealsByUser(userId, 10);
+  const pantry = pantryRepo.getPantryByUser(userId);
+  const mealHistory = mealRepo.getMealsByUser(userId, 10);
   let workoutContext = null;
-
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
-    const allWorkouts = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = allWorkouts.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = workoutRepo.getWorkoutsByUser(userId, 5).filter(w => String(w.date).split('T')[0] === today);
   }
-
-  const result = await suggestDishes({
-    user,
-    mealTime: mealTime || getCurrentMealTime(),
-    pantry,
-    mealHistory,
-    synergy: !!user.synergy_enabled,
-    workoutContext,
-  });
-
+  const result = await suggestDishes({ user, mealTime: mealTime || getCurrentMealTime(), pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext });
   return { dishes: result.dishes || [], mealTime: mealTime || getCurrentMealTime() };
 }
 
 async function confirmDish({ userId, mealTime, dish }) {
-  return mealRepo.saveMeal({
-    user_id: userId,
-    meal_time: mealTime || getCurrentMealTime(),
-    type: 'suggestion',
-    foods: dish.ingredients || [],
-    nutritional_info: dish.nutritional_info || {},
-    advice: `${dish.name}${dish.description ? ' · ' + dish.description : ''}`,
-    score: dish.score || null,
-  });
+  return mealRepo.saveMeal({ user_id: userId, meal_time: mealTime || getCurrentMealTime(), type: 'suggestion', foods: dish.ingredients || [], nutritional_info: dish.nutritional_info || {}, advice: (dish.name || '') + (dish.description ? ' · ' + dish.description : ''), score: dish.score || null });
 }
 
 module.exports = { suggest, analyzeExternal, getPantryAnalysis, getHistory, getDishSuggestions, confirmDish };

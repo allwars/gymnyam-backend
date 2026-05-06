@@ -17,7 +17,6 @@ async function analyzeMeal(req, res) {
   try {
     const userId = Number(req.params.userId);
     const { imageBase64, mimeType, mealTime } = req.body;
-
     if (!imageBase64) return res.status(400).json({ ok: false, error: 'Se requiere imageBase64' });
 
     const user = await userRepo.getUserById(userId);
@@ -38,7 +37,6 @@ async function analyzeMeal(req, res) {
       workoutContext,
     });
 
-    // Guardar la comida analizada en el historial
     const meal = await mealRepo.saveMeal({
       user_id: userId,
       meal_time: mealTime || getCurrentMealTime(),
@@ -59,7 +57,6 @@ async function scanPantry(req, res) {
   try {
     const userId = Number(req.params.userId);
     const { imageBase64, mimeType } = req.body;
-
     if (!imageBase64) return res.status(400).json({ ok: false, error: 'Se requiere imageBase64' });
 
     const user = await userRepo.getUserById(userId);
@@ -67,7 +64,6 @@ async function scanPantry(req, res) {
 
     const result = await scanPantryPhoto({ imageBase64, mimeType: mimeType || 'image/jpeg' });
 
-    // Añadir automáticamente los alimentos detectados a la despensa
     const addedItems = [];
     for (const item of result.items || []) {
       const nutritional_info = {

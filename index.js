@@ -8,6 +8,7 @@ const mealRoutes = require('./src/routes/mealRoutes');
 const pantryRoutes = require('./src/routes/pantryRoutes');
 const visionRoutes = require('./src/routes/visionRoutes');
 const progressRoutes = require('./src/routes/progressRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/admin/static', express.static(require('path').join(__dirname, 'src/views')));
 
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true, message: 'GymNYam backend running' }));
@@ -26,13 +28,14 @@ app.use('/api/meals', mealRoutes);
 app.use('/api/pantry', pantryRoutes);
 app.use('/api/vision', visionRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/admin', adminRoutes);
 
 // Error handler global
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
   console.error(err.stack);
   if (err.type === 'entity.too.large') {
-    return res.status(413).json({ ok: false, error: 'Imagen demasiado grande. Usa una foto más pequeña.' });
+    return res.status(413).json({ ok: false, error: 'Imagen demasiado grande. Usa una foto mas pequena.' });
   }
   res.status(500).json({ ok: false, error: err.message || 'Error interno del servidor' });
 });

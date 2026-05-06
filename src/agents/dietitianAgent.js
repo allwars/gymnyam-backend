@@ -1,143 +1,125 @@
 const { chat } = require('./client');
 
+const DIET_RULES = {
+  keto:                { label: 'Keto / Cetogénica',        macros: 'Grasa >70%, Proteína ~25%, Carbohidratos <5% (<25g/día)',                   forbidden: 'pan, arroz, pasta, patata, azúcar, fruta alta en azúcar, legumbres, cereales',                                                                                                                           allowed: 'carne, pescado, huevos, queso, mantequilla, aguacate, nueces, aceite de oliva, verduras de hoja verde', warning: null,                                                                                                                                                       meals_per_day: '2-3' },
+  paleo:               { label: 'Paleo / Paleolítica',       macros: 'Alta proteína y grasa natural, sin procesados',                              forbidden: 'cereales, legumbres, lácteos, azúcar refinada, aceites refinados, alimentos procesados',                                                                                                                      allowed: 'carne, pescado, huevos, frutas, verduras, frutos secos, semillas, aceite de coco/oliva',                  warning: null,                                                                                                                                                       meals_per_day: '3' },
+  intermittent_fasting:{ label: 'Ayuno Intermitente',        macros: 'Equilibrado dentro de la ventana de alimentación',                           forbidden: 'comer fuera de la ventana de ayuno activa',                                                                                                                                                                         allowed: 'todo dentro de la ventana: comida real y nutritiva',                                                       warning: 'El usuario está en ayuno intermitente. Respeta la ventana de alimentación indicada.',                                                                                meals_per_day: '2 (dentro de ventana)', fasting: true },
+  low_carb:            { label: 'Baja en Carbohidratos',     macros: 'Carbos <100-150g/día, proteína alta, grasa moderada-alta',                   forbidden: 'azúcar, pan blanco, arroz blanco, pasta, patatas, refrescos',                                                                                                                                                allowed: 'carnes, pescado, huevos, verduras, lácteos enteros, frutos secos',                                         warning: null,                                                                                                                                                       meals_per_day: '3' },
+  carnivore:           { label: 'Carnívora',                  macros: 'Solo productos animales. Cero carbohidratos.',                               forbidden: 'TODO lo vegetal: verduras, frutas, cereales, legumbres, frutos secos',                                                                                                                                        allowed: 'carne roja, pollo, cerdo, pescado, marisco, huevos, mantequilla, grasa animal, queso curado',              warning: null,                                                                                                                                                       meals_per_day: '2' },
+  whole30:             { label: 'Whole30 (30 días)',          macros: 'Alimentos naturales completos, sin procesados',                              forbidden: 'azúcar de cualquier tipo, alcohol, cereales, legumbres, lácteos, aditivos, MSG, sulfitos',                                                                                                                      allowed: 'carne, marisco, huevos, verduras, frutas, grasas naturales, café negro, hierbas naturales',                warning: 'Dieta estricta de eliminación de 30 días. Sin excepciones.',                                                                                                 meals_per_day: '3' },
+  dash:                { label: 'DASH',                       macros: 'Bajo en sodio (<2300mg/día), alto en potasio, magnesio y calcio',            forbidden: 'sal en exceso, embutidos, alimentos procesados salados, alcohol, grasas saturadas',                                                                                                                         allowed: 'frutas, verduras, lácteos bajos en grasa, cereales integrales, pescado, aves, legumbres, frutos secos',    warning: null,                                                                                                                                                       meals_per_day: '4-5 pequeñas' },
+  flexitarian:         { label: 'Flexitariana',               macros: 'Mayormente vegetal, carne ocasional (1-2 veces/semana)',                     forbidden: 'exceso de carne roja, procesados ultraprocesados',                                                                                                                                                           allowed: 'vegetales, legumbres, cereales integrales, frutos secos, huevos, lácteos, pescado, carne con moderación', warning: null,                                                                                                                                                       meals_per_day: '3-4' },
+  vegan:               { label: 'Vegana / Plant-Based',       macros: '100% vegetal. Proteína de legumbres, tofu, tempeh, semillas.',               forbidden: 'cualquier producto animal: carne, pescado, huevos, lácteos, miel',                                                                                                                                         allowed: 'verduras, frutas, legumbres, cereales, tofu, tempeh, seitán, frutos secos, semillas, leches vegetales',    warning: null,                                                                                                                                                       meals_per_day: '3-4' },
+  gluten_free:         { label: 'Sin Gluten',                 macros: 'Normal, evitando gluten',                                                   forbidden: 'trigo, cebada, centeno, espelta, kamut y derivados (pan, pasta, cuscús, cerveza)',                                                                                                                           allowed: 'arroz, maíz, patata, quinoa, avena certificada sin gluten, carne, pescado, huevos, frutas, verduras',      warning: null,                                                                                                                                                       meals_per_day: '3' },
+  zone:                { label: 'Zone Diet',                  macros: 'Cada comida: 40% carbos / 30% proteína / 30% grasa',                        forbidden: 'desequilibrio de macros, azúcar, grasas saturadas',                                                                                                                                                         allowed: 'proteínas magras, verduras de bajo IG, fruta, avena, aceite de oliva, frutos secos',                       warning: 'Cada sugerencia debe respetar el ratio 40/30/30 de carbos/proteína/grasa.',                                                                                  meals_per_day: '3 + 2 snacks' },
+  metabolic_confusion: { label: 'Metabolic Confusion',        macros: 'Alterna días altos en calorías (~2500 kcal) y bajos (~1200 kcal)',           forbidden: 'monotonía calórica',                                                                                                                                                                                        allowed: 'todo, variando calorías según el ciclo del día',                                                           warning: null,                                                                                                                                                       meals_per_day: '3-5 según el día' },
+  cabbage_soup:        { label: 'Dieta de la Sopa (Col)',     macros: 'Muy baja en calorías, 7 días con menú fijo por día',                        forbidden: 'alimentos fuera del menú del día',                                                                                                                                                                          allowed: 'sopa de col + alimentos específicos según el día (frutas / verduras / carne / arroz)',                      warning: 'Dieta muy restrictiva de 7 días. No recomendada más de una vez al mes.',                                                                                     meals_per_day: 'sopa ilimitada + complemento del día' },
+  mayo_clinic:         { label: 'Mayo Clinic',                macros: 'Fase 1 (2 semanas): pierde hábitos malos. Fase 2: mantenimiento.',          forbidden: 'azúcar añadida, grasas saturadas, sal en exceso',                                                                                                                                                           allowed: 'frutas, verduras, cereales integrales, proteínas magras, lácteos bajos en grasa',                          warning: null,                                                                                                                                                       meals_per_day: '3' },
+  mediterranean:       { label: 'Mediterránea',               macros: 'Equilibrada. Base en vegetales, aceite de oliva, pescado y legumbres.',     forbidden: 'procesados, azúcar refinada, grasas trans',                                                                                                                                                                 allowed: 'aceite de oliva, pescado azul, legumbres, verduras, frutas, cereales integrales, frutos secos',             warning: null,                                                                                                                                                       meals_per_day: '3' },
+  atkins:              { label: 'Atkins',                     macros: 'Fase inducción: <20g carbos/día. Fases posteriores: incremento gradual.',   forbidden: 'azúcar, cereales, fruta (en fase 1), legumbres (en fase 1)',                                                                                                                                                 allowed: 'carne, pescado, huevos, queso, mantequilla, verduras bajas en carbos',                                     warning: null,                                                                                                                                                       meals_per_day: '3' },
+  blood_type:          { label: 'Dieta tipo de sangre',       macros: 'Varía según tipo de sangre (A, B, AB, O)',                                  forbidden: 'alimentos inadecuados para su tipo de sangre',                                                                                                                                                              allowed: 'alimentos beneficiosos para su tipo de sangre',                                                            warning: 'Sin evidencia científica sólida. Adaptar al tipo de sangre indicado.',                                                                                       meals_per_day: '3' },
+  alkaline:            { label: 'Dieta Alcalina',             macros: 'Alimentos alcalinos (pH>7). Evitar alimentos ácidos.',                      forbidden: 'carne roja, lácteos, azúcar, cafeína, alcohol, harina refinada',                                                                                                                                           allowed: 'frutas, verduras (especialmente verdes), frutos secos, legumbres, agua con limón',                         warning: null,                                                                                                                                                       meals_per_day: '3' },
+  dairy_free:          { label: 'Sin Lácteos',                macros: 'Normal, evitando lácteos',                                                  forbidden: 'leche, yogur, queso, mantequilla, nata, helados, suero de leche',                                                                                                                                           allowed: 'leches vegetales (avena, soja, almendra), quesos veganos, aceite en lugar de mantequilla',                  warning: null,                                                                                                                                                       meals_per_day: '3' },
+  fodmap:              { label: 'FODMAP (Colon Irritable)',   macros: 'Equilibrada, evitando FODMAPs',                                             forbidden: 'ajo, cebolla, trigo, legumbres, lácteos con lactosa, manzana, pera, sandía, brócoli, coliflor, champiñones',                                                                                               allowed: 'arroz, avena, plátano, zanahoria, pepino, patata, carne, pescado, huevos, lactosa-free',                    warning: null,                                                                                                                                                       meals_per_day: '3' },
+  omad:                { label: 'OMAD (Una Comida al Día)',   macros: 'Toda la ingesta calórica en UNA sola comida. Ventana de 1 hora.',           forbidden: 'comer fuera de la ventana de 1 hora',                                                                                                                                                                       allowed: 'comida completa y nutritiva una vez al día',                                                               warning: 'Ventana de ayuno de 23 horas. Solo 1 comida al día.',                                                                                                        meals_per_day: '1', fasting: true },
+  '5_2':               { label: '5:2',                        macros: '5 días: dieta normal. 2 días: máximo 500-600 kcal.',                        forbidden: 'superar 600 kcal en días de restricción',                                                                                                                                                                   allowed: 'todo en días normales. En días de restricción: verduras, proteína magra, caldo.',                           warning: 'Hoy puede ser día de restricción (500-600 kcal máx).',                                                                                                       meals_per_day: '3 (normales) / 2 muy pequeñas (restricción)', calorie_limit_fast_day: 600 },
+  batch_cooking:       { label: 'Batch Cooking',              macros: 'Equilibrada, planificada semanalmente',                                     forbidden: 'nada específico',                                                                                                                                                                                           allowed: 'comida real preparada en cantidad. Recetas que se conserven bien 4-5 días.',                                warning: null,                                                                                                                                                       meals_per_day: '3', batch: true },
+  raw_food:            { label: 'Crudívora (Raw Food)',       macros: 'Solo alimentos crudos o deshidratados por debajo de 47C',                   forbidden: 'cualquier alimento cocinado a más de 47C',                                                                                                                                                                  allowed: 'frutas, verduras crudas, germinados, frutos secos, semillas, zumos, smoothies',                            warning: null,                                                                                                                                                       meals_per_day: '3-4' },
+  low_fodmap_sibo:     { label: 'Low-FODMAP estricta (SIBO)', macros: 'Igual que FODMAP pero versión muy estricta sin margen',                     forbidden: 'TODOS los FODMAPs: ajo, cebolla, lactosa, fructosa en exceso, polioles, galactanos, fructanos',                                                                                                           allowed: 'arroz blanco, patata, zanahoria, pepino, tomate pequeño, carne, pescado, huevos, aceite',                   warning: 'Versión estricta para SIBO. Sin excepciones.',                                                                                                               meals_per_day: '3' },
+  anti_inflammatory:   { label: 'Antiinflamatoria',           macros: 'Rica en omega-3, antioxidantes y fibra',                                    forbidden: 'azúcar refinada, harinas blancas, aceites vegetales refinados, carnes procesadas, alcohol, comida frita',                                                                                                   allowed: 'pescado azul, frutas del bosque, cúrcuma, jengibre, verduras de hoja, aceite de oliva, frutos secos',       warning: null,                                                                                                                                                       meals_per_day: '3' },
+  aip:                 { label: 'AIP (Protocolo Autoinmune)', macros: 'Eliminación estricta + reintroducción por fases',                           forbidden: 'cereales, legumbres, lácteos, huevos, solanáceas (tomate, pimiento, berenjenas), frutos secos, semillas, alcohol, café, aditivos',                                                                          allowed: 'carne, pescado, marisco, verduras (excepto solanáceas), frutas con moderación, aceite de coco/oliva',       warning: 'Dieta de eliminación muy estricta para enfermedades autoinmunes. Consultar con médico.',                                                                     meals_per_day: '3' },
+  hcg:                 { label: 'Dieta HCG',                  macros: 'MUY baja en calorías: solo 500 kcal/día',                                  forbidden: 'grasas, azúcar, cualquier alimento calórico fuera del protocolo',                                                                                                                                           allowed: 'proteína magra (100g), verduras sin almidón, fruta baja en azúcar, tostadas Melba (2/día)',                 warning: 'ADVERTENCIA MEDICA: La dieta HCG (500 kcal/día) NO tiene respaldo científico y puede ser PELIGROSA.',        meals_per_day: '2 muy pequeñas', calorie_limit: 500 },
+  military:            { label: 'Dieta Militar (3 días)',     macros: 'Muy baja en calorías durante 3 días (~1000 kcal)',                          forbidden: 'calorías extra fuera del menú establecido',                                                                                                                                                                 allowed: 'menú fijo: atún, huevo, manzana, tostada, queso cottage, brócoli, zanahoria, plátano, helado vainilla',     warning: 'Solo 3 días consecutivos. Luego 4 días de alimentación normal.',                                                                                             meals_per_day: '3 muy pequeñas', calorie_limit: 1000 },
+  egg_diet:            { label: 'Dieta del Huevo',            macros: 'Muy restrictiva: huevos + proteína magra + pomelo',                         forbidden: 'carbohidratos, grasas añadidas, azúcar, cualquier alimento no incluido en el protocolo',                                                                                                                   allowed: 'huevos cocidos, pomelo, pollo/pescado a la plancha, agua, café/té sin azúcar',                              warning: 'Dieta extremadamente restrictiva. No recomendada más de 2 semanas.',                                                                                          meals_per_day: '3 muy pequeñas' },
+};
+
+function buildDietContext(user) {
+  const diet = DIET_RULES[user.diet_type];
+  if (!diet) return '';
+  const lines = [
+    'DIETA DEL USUARIO: ' + diet.label,
+    'Macros objetivo: ' + diet.macros,
+    'PROHIBIDO incluir: ' + diet.forbidden,
+    'Permitido: ' + diet.allowed,
+  ];
+  if (diet.warning) lines.push('AVISO: ' + diet.warning);
+  if (diet.fasting && user.diet_fasting_window) {
+    lines.push('Ventana de alimentación: ' + user.diet_fasting_window);
+    lines.push('NO sugieras comer fuera de esta ventana.');
+  }
+  if (diet.calorie_limit) lines.push('LIMITE CALORICO: ' + diet.calorie_limit + ' kcal totales en el día.');
+  if (user.diet_phase) lines.push('Fase actual de la dieta: ' + user.diet_phase);
+  if (user.diet_type === 'blood_type' && user.diet_blood_type) lines.push('Tipo de sangre: ' + user.diet_blood_type);
+  lines.push('IMPORTANTE: Todas las sugerencias DEBEN cumplir estrictamente las restricciones de esta dieta.');
+  return lines.join('\n');
+}
+
 async function suggestMeal({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
-  const system = `Eres un dietista experto en nutrición deportiva. Sugiere comidas reales, sencillas y preparables en casa.
-IMPORTANTE: sugiere comidas comunes de la dieta mediterránea/española. Nada exótico ni de restaurante.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{
-  "suggestion": "string",
-  "foods": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5}],
-  "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10},
-  "advice": "string",
-  "score": 8
-}`;
-
+  const dietContext = buildDietContext(user);
+  const diet = DIET_RULES[user.diet_type];
+  const system = 'Eres un dietista experto en nutrición deportiva y dietas específicas.\n' +
+    (dietContext ? 'RESTRICCIONES DE DIETA:\n' + dietContext : 'Dieta mediterránea estándar.') + '\n' +
+    'Comidas al día para esta dieta: ' + (diet ? diet.meals_per_day : '3') + '.\n' +
+    'Responde UNICAMENTE con JSON valido:\n{"suggestion":"string","foods":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"sugar":3}],"nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10},"advice":"string","score":8,"diet_compliant":true}';
   const context = [
-    `Perfil: objetivo ${user.goal}, peso ${user.weight}kg, edad ${user.age}`,
-    user.allergies ? `Alergias: ${user.allergies}` : '',
-    `Momento: ${mealTime}`,
-    pantry?.length
-      ? `USA ESTOS ingredientes de la despensa: ${pantry.map(p => `${p.name}${p.quantity ? ' (' + p.quantity + ')' : ''}`).join(', ')}`
-      : 'Sin despensa, sugiere algo simple y común.',
-    synergy && workoutContext?.length
-      ? `Entrenamiento de hoy: ${workoutContext[0]?.sport || 'ejercicio'} — ajusta proteína/carbos según la actividad`
-      : '',
+    'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg, edad ' + user.age,
+    user.allergies ? 'Alergias: ' + user.allergies : '',
+    'Momento: ' + mealTime,
+    pantry && pantry.length ? 'USA ESTOS ingredientes: ' + pantry.map(function(p){ return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ') : 'Sin despensa, sugiere algo simple.',
+    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
   ].filter(Boolean).join('\n');
-
-  return chat(system, `Sugiere qué comer ahora. Sé práctico y realista.\n${context}`, 1000);
+  return chat(system, 'Sugiere qué comer ahora.\n' + context, 1000);
 }
 
 async function analyzeExternalMeal({ user, description, synergy, workoutContext }) {
-  const system = `Eres un dietista experto. Analiza comidas y da su valor nutricional estimado completo.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{
-  "foods": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "fiber": 2, "sugar": 3, "has_preservatives": false}],
-  "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10, "total_fiber": 8, "total_sugar": 12},
-  "advice": "string",
-  "score": 7
-}
-"has_preservatives": true si el alimento es procesado y contiene aditivos/conservantes (E-xxx). false si es fresco o natural.`;
-
+  const dietContext = buildDietContext(user);
+  const system = 'Eres un dietista experto. Analiza comidas y da su valor nutricional estimado.\n' +
+    (dietContext ? 'DIETA DEL USUARIO:\n' + dietContext : '') + '\n' +
+    'Responde UNICAMENTE con JSON valido:\n{"foods":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"advice":"string","score":7,"diet_compliant":true,"diet_violations":[]}';
   const context = [
-    `Perfil: objetivo ${user.goal}, peso ${user.weight}kg`,
-    user.allergies ? `Alergias: ${user.allergies}` : '',
-    `Comida a analizar: ${description}`,
-    synergy && workoutContext?.length ? `Entrenamiento de hoy: ${workoutContext[0]?.sport || 'ejercicio'}` : '',
+    'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg',
+    user.allergies ? 'Alergias: ' + user.allergies : '',
+    'Comida a analizar: ' + description,
+    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
   ].filter(Boolean).join('\n');
-
   return chat(system, context, 800);
 }
 
 async function analyzePantry({ user, pantry, mealHistory }) {
-  const system = `Eres un dietista experto. Analiza la despensa de un usuario.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{
-  "score": 7,
-  "summary": "string",
-  "strengths": ["string"],
-  "improvements": ["string"],
-  "motivation": "string"
-}`;
-
-  const context = `Objetivo: ${user.goal}\nAlimentos en despensa: ${pantry.map(p => p.name).join(', ')}\nComidas registradas: ${mealHistory?.length || 0}`;
-
-  return chat(system, `Analiza esta despensa.\n${context}`, 600);
+  const dietContext = buildDietContext(user);
+  const system = 'Eres un dietista experto. Analiza la despensa de un usuario.\n' +
+    (dietContext ? 'DIETA DEL USUARIO:\n' + dietContext : '') + '\n' +
+    'Responde UNICAMENTE con JSON valido:\n{"score":7,"summary":"string","strengths":["string"],"improvements":["string"],"diet_compatible_items":["string"],"diet_incompatible_items":["string"],"motivation":"string"}';
+  const context = 'Objetivo: ' + user.goal + '\nAlimentos en despensa: ' + pantry.map(function(p){ return p.name; }).join(', ') + '\nComidas registradas: ' + (mealHistory ? mealHistory.length : 0);
+  return chat(system, 'Analiza esta despensa.\n' + context, 600);
 }
 
 async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
-  const system = `Eres un dietista y cocinero experto en cocina casera española/mediterránea.
-Sugiere 3 platos REALES, sencillos y que se pueden preparar en casa con ingredientes normales.
-NORMAS ESTRICTAS:
-- Platos cotidianos reales (tortilla, pasta, ensalada, filete, arroz, bocadillo, etc.)
-- Tiempo de preparación realista (5-30 min)
-- Si hay despensa, USA los ingredientes disponibles al máximo
-- NO sugieras platos de restaurante ni recetas exóticas
-- Varía: un plato caliente, uno rápido/frío, uno intermedio
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
-{
-  "dishes": [
-    {
-      "name": "Nombre concreto del plato (ej: 'Tortilla de patatas', 'Pasta con tomate y atún')",
-      "emoji": "🍳",
-      "description": "Descripción breve en 1 frase",
-      "ingredients": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5, "fiber": 2, "sugar": 3, "has_preservatives": false}],
-      "recipe_steps": ["Paso 1...", "Paso 2...", "Paso 3..."],
-      "prep_time": "15 min",
-      "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10, "total_fiber": 8, "total_sugar": 12},
-      "score": 8,
-      "uses_pantry": true
-    }
-  ]
-}`;
-
+  const dietContext = buildDietContext(user);
+  const diet = DIET_RULES[user.diet_type];
+  const system = 'Eres un dietista y cocinero experto.\n' +
+    (dietContext ? 'RESTRICCIONES ESTRICTAS DE DIETA (OBLIGATORIO CUMPLIR):\n' + dietContext : 'Cocina casera española/mediterránea.') + '\n' +
+    'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '. Platos reales, sencillos, 5-30 min.\n' +
+    'Responde UNICAMENTE con JSON valido:\n{"dishes":[{"name":"string","emoji":"string","description":"string","ingredients":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["string"],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}';
   const context = [
-    `Perfil: objetivo ${user.goal}, peso ${user.weight}kg, edad ${user.age}, sexo ${user.sex}`,
-    user.allergies ? `⚠️ Alergias/intolerancias: ${user.allergies}` : '',
-    `Momento del día: ${mealTime}`,
-    pantry?.length
-      ? `INGREDIENTES DISPONIBLES (úsalos): ${pantry.map(p => `${p.name}${p.quantity ? ' (' + p.quantity + ')' : ''}`).join(', ')}`
-      : 'Sin despensa — sugiere platos con ingredientes básicos comunes (huevos, pasta, arroz, pan, etc.).',
-    mealHistory?.length
-      ? `Comidas recientes (evita repetir): ${mealHistory.slice(0, 3).map(m => m.advice || m.foods?.[0]?.name).filter(Boolean).join(', ')}`
-      : '',
-    synergy && workoutContext?.length
-      ? `Entrenamiento de hoy: ${workoutContext[0]?.sport || 'ejercicio'} — prioriza recuperación muscular`
-      : '',
+    'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg, edad ' + user.age + ', sexo ' + user.sex,
+    user.allergies ? 'Alergias: ' + user.allergies : '',
+    'Momento: ' + mealTime,
+    pantry && pantry.length ? 'INGREDIENTES DISPONIBLES: ' + pantry.map(function(p){ return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ') : 'Sin despensa — ingredientes básicos.',
+    mealHistory && mealHistory.length ? 'Evitar repetir: ' + mealHistory.slice(0,3).map(function(m){ return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ') : '',
+    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
   ].filter(Boolean).join('\n');
-
-  return chat(system, `Sugiere 3 platos caseros y realistas para ahora.\n${context}`, 2000);
+  return chat(system, 'Sugiere 3 platos para ahora.\n' + context, 2000);
 }
 
-async function lookupFoodNutrition({ foodName }) {
-  const system = `Eres un experto nutricionista. Proporciona datos nutricionales precisos de alimentos.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional, con esta estructura exacta:
-{
-  "calories_per_100g": 0,
-  "protein_per_100g": 0,
-  "carbs_per_100g": 0,
-  "fat_per_100g": 0,
-  "saturated_fat_per_100g": 0,
-  "fiber_per_100g": 0,
-  "sugar_per_100g": 0,
-  "salt_per_100g": 0,
-  "has_preservatives": false,
-  "additives_count": 0,
-  "score": 0,
-  "score_label": "Bueno",
-  "positive_points": [
-    { "icon": "🥩", "label": "string", "description": "string", "value": "string", "color": "green" }
-  ],
-  "negative_points": [
-    { "icon": "⚠️", "label": "string", "description": "string", "value": "string", "color": "red" }
-  ]
-}
-Reglas para score (0-100): empieza en 50, +20 si proteína>15g, +10 si fibra>3g, +10 si sin conservantes, -15 si azúcar>20g, -15 si grasas saturadas>5g, -10 si sal>1.5g, -20 si aditivos>5, máx 100 mín 0.
-score_label: 0-39="Malo", 40-59="Mediocre", 60-74="Bueno", 75-100="Excelente".
-En positive_points incluye solo los valores nuticionalmente buenos (proteína alta, fibra alta, sin conservantes, bajo en azúcar, bajo en sal, bajo en grasa saturada). color siempre "green".
-En negative_points incluye solo los problemas (calorías altas >400, grasa saturada alta, azúcar alta, sal alta, conservantes/aditivos). color: "red" si muy malo, "orange" si moderado.
-Iconos sugeridos: proteínas=🥩, fibra=🌿, azúcar=🍬, grasa=💧, grasa saturada=🫧, sal=🧂, calorías=🔥, aditivos=⚗️, natural=✅, energía=⚡`;
-
-  return chat(system, `Analiza este alimento y devuelve sus datos nutricionales completos: "${foodName}"`, 1200);
+function getDietInfo(dietType) {
+  return DIET_RULES[dietType] || null;
 }
 
-module.exports = { suggestMeal, analyzeExternalMeal, analyzePantry, suggestDishes, lookupFoodNutrition };
+function getAllDiets() {
+  return Object.entries(DIET_RULES).map(function([id, d]) {
+    return { id: id, label: d.label, meals_per_day: d.meals_per_day, fasting: !!d.fasting, calorie_limit: d.calorie_limit || null, warning: d.warning || null, batch: d.batch || false };
+  });
+}
+
+module.exports = { suggestMeal, analyzeExternalMeal, analyzePantry, suggestDishes, getDietInfo, getAllDiets };

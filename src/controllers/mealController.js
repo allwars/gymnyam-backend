@@ -16,7 +16,7 @@ async function analyzeExternal(req, res) {
   try {
     const userId = Number(req.params.userId);
     const { description, mealTime } = req.body;
-    if (!description) return res.status(400).json({ ok: false, error: 'Descripción requerida' });
+    if (!description) return res.status(400).json({ ok: false, error: 'Descripcion requerida' });
     const meal = await mealService.analyzeExternal({ userId, description, mealTime });
     res.json({ ok: true, meal });
   } catch (err) {

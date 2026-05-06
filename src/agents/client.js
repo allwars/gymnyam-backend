@@ -1,12 +1,18 @@
 const OpenAI = require('openai');
 
-const groq = new OpenAI({
-  baseURL: 'https://api.groq.com/openai/v1',
-  apiKey: process.env.GROQ_API_KEY,
-  timeout: 30000,
-});
-
 const MODEL = 'llama-3.3-70b-versatile';
+
+let _groq = null;
+function getClient() {
+  if (!_groq) {
+    _groq = new OpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY,
+      timeout: 30000,
+    });
+  }
+  return _groq;
+}
 
 function extractJson(text) {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -26,7 +32,7 @@ function extractJson(text) {
 }
 
 async function chat(systemPrompt, userPrompt, maxTokens = 2000) {
-  const resp = await groq.chat.completions.create({
+  const resp = await getClient().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: systemPrompt },

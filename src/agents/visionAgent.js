@@ -1,10 +1,16 @@
 const OpenAI = require('openai');
 
-const groq = new OpenAI({
-  baseURL: 'https://api.groq.com/openai/v1',
-  apiKey: process.env.GROQ_API_KEY,
-  timeout: 60000, // 60s para visión (más pesado)
-});
+let _groq = null;
+function getClient() {
+  if (!_groq) {
+    _groq = new OpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY,
+      timeout: 60000,
+    });
+  }
+  return _groq;
+}
 
 const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
@@ -19,20 +25,20 @@ function extractJson(text) {
     if (start !== -1 && end !== -1) {
       try { return JSON.parse(raw.slice(start, end + 1)); } catch {}
     }
-    throw new Error('La IA devolvió una respuesta incorrecta. Inténtalo de nuevo.');
+    throw new Error('La IA devolvio una respuesta incorrecta. Intentalo de nuevo.');
   }
 }
 
 async function analyzeMealPhoto({ user, imageBase64, mimeType = 'image/jpeg', synergy, workoutContext }) {
-  const system = `Eres un dietista experto con visión computacional. Analiza la foto de una comida y estima su valor nutricional.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
+  const system = `Eres un dietista experto con vision computacional. Analiza la foto de una comida y estima su valor nutricional.
+Responde UNICAMENTE con JSON valido, sin texto adicional:
 {
   "foods": [{"name": "string", "quantity": "string", "calories": 100, "protein": 10, "carbs": 20, "fat": 5}],
   "nutritional_info": {"total_calories": 400, "total_protein": 30, "total_carbs": 50, "total_fat": 10},
   "advice": "string",
   "score": 7
 }
-"score" es 0-10 según lo bien que encaja con el objetivo del usuario.`;
+"score" es 0-10 segun lo bien que encaja con el objetivo del usuario.`;
 
   const contextParts = [
     `Perfil: objetivo ${user.goal}, peso ${user.weight}kg`,
@@ -42,7 +48,7 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
 
   console.log(`[Vision] Analizando foto de comida con ${VISION_MODEL}...`);
   try {
-    const response = await groq.chat.completions.create({
+    const response = await getClient().chat.completions.create({
       model: VISION_MODEL,
       max_tokens: 800,
       temperature: 0.3,
@@ -59,20 +65,20 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
     });
 
     const text = response.choices[0]?.message?.content?.trim();
-    if (!text) throw new Error('La IA no devolvió contenido.');
-    console.log(`[Vision] ✓ Análisis de comida OK`);
+    if (!text) throw new Error('La IA no devolvio contenido.');
+    console.log(`[Vision] OK analisis de comida`);
     return extractJson(text);
   } catch (err) {
     if (err.code === 'ETIMEDOUT' || err.message?.includes('timeout')) {
-      throw new Error('La IA tardó demasiado analizando la foto. Inténtalo de nuevo.');
+      throw new Error('La IA tardo demasiado analizando la foto. Intentalo de nuevo.');
     }
     throw err;
   }
 }
 
 async function scanPantryPhoto({ imageBase64, mimeType = 'image/jpeg' }) {
-  const system = `Eres un experto en nutrición con visión computacional. Analiza la foto de una nevera o despensa e identifica todos los alimentos visibles con sus valores nutricionales estimados por 100g.
-Responde ÚNICAMENTE con JSON válido, sin texto adicional:
+  const system = `Eres un experto en nutricion con vision computacional. Analiza la foto de una nevera o despensa e identifica todos los alimentos visibles con sus valores nutricionales estimados por 100g.
+Responde UNICAMENTE con JSON valido, sin texto adicional:
 {
   "items": [
     {
@@ -88,13 +94,11 @@ Responde ÚNICAMENTE con JSON válido, sin texto adicional:
     }
   ],
   "summary": "string"
-}
-"has_preservatives": true si es un producto procesado/envasado con aditivos o conservantes (E-xxx). false si es fresco, natural o sin procesar.
-Identifica el máximo de alimentos posibles. Si no puedes leer una cantidad, pon null.`;
+}`;
 
   console.log(`[Vision] Escaneando nevera/despensa con ${VISION_MODEL}...`);
   try {
-    const response = await groq.chat.completions.create({
+    const response = await getClient().chat.completions.create({
       model: VISION_MODEL,
       max_tokens: 1200,
       temperature: 0.2,
@@ -111,12 +115,12 @@ Identifica el máximo de alimentos posibles. Si no puedes leer una cantidad, pon
     });
 
     const text = response.choices[0]?.message?.content?.trim();
-    if (!text) throw new Error('La IA no devolvió contenido.');
-    console.log(`[Vision] ✓ Escaneo de nevera OK`);
+    if (!text) throw new Error('La IA no devolvio contenido.');
+    console.log(`[Vision] OK escaneo de nevera`);
     return extractJson(text);
   } catch (err) {
     if (err.code === 'ETIMEDOUT' || err.message?.includes('timeout')) {
-      throw new Error('La IA tardó demasiado analizando la foto. Inténtalo de nuevo.');
+      throw new Error('La IA tardo demasiado analizando la foto. Intentalo de nuevo.');
     }
     throw err;
   }

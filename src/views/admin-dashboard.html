@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gym'n'yam — Admin Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e2e8f0; min-height: 100vh; }
+
+  header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px 32px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 22px; font-weight: 700; color: #f7c948; letter-spacing: -0.5px; }
+  header h1 span { color: #68d391; }
+  .badge { background: #2d3748; color: #a0aec0; font-size: 12px; padding: 4px 12px; border-radius: 20px; }
+  .refresh-btn { background: #2b6cb0; color: #fff; border: none; padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+  .refresh-btn:hover { background: #2c5282; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 24px; padding: 28px 32px; max-width: 1600px; margin: 0 auto; }
+
+  .card { background: #1a1a2e; border: 1px solid #2d3748; border-radius: 16px; padding: 22px; }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .card-icon { font-size: 22px; }
+  .card-title { font-size: 16px; font-weight: 600; color: #e2e8f0; }
+  .card-subtitle { font-size: 12px; color: #718096; margin-top: 2px; }
+
+  .chart-container { position: relative; height: 240px; }
+
+  .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
+  .stat-box { flex: 1; background: #16213e; border: 1px solid #2d3748; border-radius: 12px; padding: 14px; text-align: center; }
+  .stat-box .num { font-size: 28px; font-weight: 700; color: #f7c948; }
+  .stat-box .lbl { font-size: 11px; color: #718096; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .food-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .food-cat { background: #16213e; border-radius: 10px; padding: 14px; }
+  .food-cat-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .food-cat.protein .food-cat-title { color: #fc8181; }
+  .food-cat.fat .food-cat-title { color: #f6e05e; }
+  .food-cat.carb .food-cat-title { color: #68d391; }
+  .food-cat.sugar .food-cat-title { color: #b794f4; }
+  .food-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #2d3748; font-size: 13px; }
+  .food-item:last-child { border-bottom: none; }
+  .food-count { background: #2d3748; color: #a0aec0; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+  .loading { text-align: center; color: #718096; padding: 40px; font-size: 14px; }
+  .error { background: #742a2a; border: 1px solid #fc8181; border-radius: 8px; padding: 12px 16px; color: #fc8181; font-size: 13px; margin: 16px 32px; }
+  .empty { color: #718096; font-size: 13px; text-align: center; padding: 20px; }
+
+  .last-updated { text-align: center; color: #4a5568; font-size: 12px; padding: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Gym'n'yam <span>Admin</span></h1>
+    <div class="badge" id="last-update">Cargando datos...</div>
+  </div>
+  <button class="refresh-btn" onclick="loadAll()">↺ Actualizar</button>
+</header>
+
+<div id="error-box" style="display:none"></div>
+
+<div id="stats-row" class="stats-row" style="padding: 0 32px; margin-top: 24px; max-width: 1600px; margin-left: auto; margin-right: auto;">
+  <div class="stat-box"><div class="num" id="total-diets">—</div><div class="lbl">Dietas distintas</div></div>
+  <div class="stat-box"><div class="num" id="total-sports">—</div><div class="lbl">Deportes</div></div>
+  <div class="stat-box"><div class="num" id="total-exercises">—</div><div class="lbl">Ejercicios únicos</div></div>
+  <div class="stat-box"><div class="num" id="total-foods">—</div><div class="lbl">Alimentos distintos</div></div>
+</div>
+
+<div class="grid">
+
+  <!-- Dietas más populares -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🥗</span>
+      <div>
+        <div class="card-title">Dietas más seguidas</div>
+        <div class="card-subtitle">Top 10 por número de usuarios</div>
+      </div>
+    </div>
+    <div class="chart-container"><canvas id="chartDiets"></canvas></div>
+  </div>
+
+  <!-- Deportes más practicados -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🏃</span>
+      <div>
+        <div class="card-title">Deportes más practicados</div>
+        <div class="card-subtitle">Top 10 por registros</div>
+      </div>
+    </div>
+    <div class="chart-container"><canvas id="chartSports"></canvas></div>
+  </div>
+
+  <!-- Ejercicios más realizados -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">💪</span>
+      <div>
+        <div class="card-title">Ejercicios más realizados</div>
+        <div class="card-subtitle">Top 15 ejercicios específicos</div>
+      </div>
+    </div>
+    <div class="chart-container" style="height: 280px;"><canvas id="chartExercises"></canvas></div>
+  </div>
+
+  <!-- Alimentos por categoría -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🍽️</span>
+      <div>
+        <div class="card-title">Alimentos más consumidos</div>
+        <div class="card-subtitle">Divididos por macronutriente</div>
+      </div>
+    </div>
+    <div class="food-grid" id="foodGrid">
+      <div class="loading">Cargando...</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="last-updated" id="timestamp"></div>
+
+<script>
+const BASE = '';
+let charts = {};
+
+const DIET_LABELS = {
+  keto: 'Keto', paleo: 'Paleo', intermittent_fasting: 'Ayuno Intermitente',
+  low_carb: 'Low-Carb', carnivore: 'Carnívora', whole30: 'Whole30',
+  dash: 'DASH', flexitarian: 'Flexitariana', vegan: 'Vegana',
+  gluten_free: 'Sin Gluten', zone: 'Zone Diet', metabolic_confusion: 'Metabolic Confusion',
+  cabbage_soup: 'Sopa de Col', mayo_clinic: 'Mayo Clinic', mediterranean: 'Mediterránea',
+  atkins: 'Atkins', blood_type: 'Tipo de Sangre', alkaline: 'Alcalina',
+  dairy_free: 'Sin Lácteos', fodmap: 'FODMAP', omad: 'OMAD',
+  '5_2': '5:2', batch_cooking: 'Batch Cooking', raw_food: 'Crudívora',
+  low_fodmap_sibo: 'Low-FODMAP SIBO', anti_inflammatory: 'Antiinflamatoria',
+  aip: 'AIP', hcg: 'HCG', military: 'Militar', egg_diet: 'Dieta del Huevo',
+};
+
+const PALETTE = [
+  '#f7c948','#68d391','#63b3ed','#fc8181','#b794f4',
+  '#f6ad55','#4fd1c5','#f687b3','#76e4f7','#9f7aea',
+  '#48bb78','#ed8936','#4299e1','#e53e3e','#667eea',
+];
+
+function makeChart(id, type, labels, data, colors) {
+  const ctx = document.getElementById(id).getContext('2d');
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors || PALETTE, borderColor: 'transparent', borderRadius: 6 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: type === 'bar' ? 'y' : 'x',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.raw} registros`,
+          },
+        },
+      },
+      scales: type === 'bar' ? {
+        x: { ticks: { color: '#718096', font: { size: 11 } }, grid: { color: '#2d3748' } },
+        y: { ticks: { color: '#a0aec0', font: { size: 12 } }, grid: { display: false } },
+      } : {},
+    },
+  });
+}
+
+function renderFoodGrid(foods) {
+  const cats = [
+    { key: 'protein', label: '🥩 Proteínas', cls: 'protein' },
+    { key: 'fat', label: '🧈 Grasas', cls: 'fat' },
+    { key: 'carb', label: '🍚 Carbohidratos', cls: 'carb' },
+    { key: 'sugar', label: '🍬 Azucarados', cls: 'sugar' },
+  ];
+  const grid = document.getElementById('foodGrid');
+  grid.innerHTML = cats.map(cat => {
+    const items = (foods[cat.key] || []).slice(0, 8);
+    return `
+      <div class="food-cat ${cat.cls}">
+        <div class="food-cat-title">${cat.label}</div>
+        ${items.length
+          ? items.map(f => `<div class="food-item"><span>${cap(f.food_name)}</span><span class="food-count">${f.count}</span></div>`).join('')
+          : '<div class="empty">Sin datos aún</div>'}
+      </div>`;
+  }).join('');
+}
+
+function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.style.display = 'block';
+  box.className = 'error';
+  box.textContent = '⚠️ ' + msg;
+}
+
+async function loadAll() {
+  document.getElementById('error-box').style.display = 'none';
+  document.getElementById('last-update').textContent = 'Actualizando...';
+
+  try {
+    const res = await fetch('/admin/stats');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { stats } = await res.json();
+
+    // Totales
+    document.getElementById('total-diets').textContent = stats.diets.length;
+    document.getElementById('total-sports').textContent = stats.sports.length;
+    document.getElementById('total-exercises').textContent = stats.exercises.length;
+    const totalFoodItems = Object.values(stats.foods).reduce((acc, arr) => acc + arr.length, 0);
+    document.getElementById('total-foods').textContent = totalFoodItems;
+
+    // Chart dietas (pie)
+    if (stats.diets.length) {
+      makeChart('chartDiets', 'doughnut',
+        stats.diets.map(d => DIET_LABELS[d.diet_type] || d.diet_type),
+        stats.diets.map(d => d.count),
+        PALETTE,
+      );
+    } else {
+      document.getElementById('chartDiets').parentElement.innerHTML = '<div class="empty">Sin datos de dietas aún</div>';
+    }
+
+    // Chart deportes (bar horizontal)
+    if (stats.sports.length) {
+      makeChart('chartSports', 'bar',
+        stats.sports.map(s => cap(s.sport_name)),
+        stats.sports.map(s => s.count),
+        PALETTE,
+      );
+    } else {
+      document.getElementById('chartSports').parentElement.innerHTML = '<div class="empty">Sin datos de deportes aún</div>';
+    }
+
+    // Chart ejercicios (bar horizontal)
+    if (stats.exercises.length) {
+      makeChart('chartExercises', 'bar',
+        stats.exercises.map(e => cap(e.exercise_name)),
+        stats.exercises.map(e => e.count),
+        PALETTE,
+      );
+    } else {
+      document.getElementById('chartExercises').parentElement.innerHTML = '<div class="empty">Sin datos de ejercicios aún</div>';
+    }
+
+    // Grid alimentos
+    renderFoodGrid(stats.foods);
+
+    const now = new Date().toLocaleTimeString('es-ES');
+    document.getElementById('last-update').textContent = `Actualizado a las ${now}`;
+    document.getElementById('timestamp').textContent = `Última actualización: ${new Date().toLocaleString('es-ES')}`;
+
+  } catch (err) {
+    showError('No se pudo cargar la API: ' + err.message + ' — ¿Está el backend corriendo?');
+    document.getElementById('last-update').textContent = 'Error al cargar';
+  }
+}
+
+loadAll();
+setInterval(loadAll, 60000); // Auto-refresh cada 60s
+</script>
+</body>
+</html>

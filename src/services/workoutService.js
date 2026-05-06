@@ -2,62 +2,44 @@ const { generateWorkout } = require('../agents/trainerAgent');
 const workoutRepo = require('../repositories/workoutRepository');
 const mealRepo = require('../repositories/mealRepository');
 const userRepo = require('../repositories/userRepository');
-const supabase = require('../db/supabase');
 
-async function generateAndSave({ userId, sport, level }) {
-  const user = await userRepo.getUserById(userId);
+async function generateAndSave({ userId, sport }) {
+  const user = userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
 
-  const history = await workoutRepo.getWorkoutsByUser(userId, 5);
+  const history = workoutRepo.getWorkoutsByUser(userId, 5);
   let mealContext = null;
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
-    const allMeals = await mealRepo.getMealsByUser(userId, 10);
+    const allMeals = mealRepo.getMealsByUser(userId, 10);
     mealContext = allMeals.filter(m => String(m.date).split('T')[0] === today);
   }
-
-  const resolvedSport = sport || (user.sports?.[0]?.name);
-  // Si no viene level del frontend, intentar sacarlo del perfil del usuario
-  const resolvedLevel = level
-    || (user.sports?.find(s => s.name === resolvedSport)?.level)
-    || 'Intermedio';
 
   const plan = await generateWorkout({
     user,
     history,
-    sport: resolvedSport,
-    level: resolvedLevel,
+    sport: sport || (user.sports?.[0]?.name),
     synergy: !!user.synergy_enabled,
     mealContext,
   });
 
-  const saved = await workoutRepo.saveWorkout({
+  return workoutRepo.saveWorkout({
     user_id: userId,
-    sport: resolvedSport,
+    sport: sport || (user.sports?.[0]?.name),
     warmup: plan.warmup,
     exercises: plan.exercises,
     stretching: plan.stretching,
     summary: plan.summary,
-    difficulty: plan.difficulty || resolvedLevel,
-    estimated_duration: plan.estimated_duration || null,
     notes: null,
   });
-
-  // Garantizamos que difficulty y estimated_duration siempre están en la respuesta
-  return {
-    ...saved,
-    difficulty: saved.difficulty || plan.difficulty || resolvedLevel,
-    estimated_duration: saved.estimated_duration || plan.estimated_duration || null,
-  };
 }
 
 async function getHistory(userId, limit) {
   return workoutRepo.getWorkoutsByUser(userId, limit);
 }
 
-async function saveNotes(workoutId, notes) {
-  await supabase.from('workouts').update({ notes }).eq('id', workoutId);
-  return workoutRepo.getWorkoutById(workoutId);
+async function saveNotes(workoutId, userId, notes) {
+  return workoutRepo.updateWorkout(workoutId, userId, { notes });
 }
 
 async function updateWorkout(workoutId, userId, data) {
