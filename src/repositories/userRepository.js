@@ -41,7 +41,7 @@ async function getUserByEmail(email) {
 
 async function updateSynergy(userId, enabled) {
   const { data, error } = await supabase
-    .from('users').update({ synergy_enabled: enabled }).eq('id', userId).select('*, sports(*)').single();
+    .from('users').update({ synergy_enabled: enabled ? 1 : 0 }).eq('id', userId).select('*, sports(*)').single();
   if (error) throw new Error(error.message);
   return data;
 }
