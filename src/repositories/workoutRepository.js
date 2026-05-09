@@ -11,6 +11,7 @@ async function saveWorkout(data) {
       exercises: data.exercises || [],
       stretching: data.stretching || [],
       summary: data.summary || null,
+      difficulty: data.difficulty || null,
       notes: data.notes || null,
       date: data.date || new Date().toISOString().split('T')[0],
     })
