@@ -72,8 +72,10 @@ async function updateMeal(req, res) {
 async function getDishSuggestions(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const { mealTime } = req.body;
-    const result = await mealService.getDishSuggestions({ userId, mealTime });
+    const { mealTime, selectedIngredients } = req.body;
+    // selectedIngredients: array de nombres de ingredientes seleccionados por el usuario
+    // Si no se envía, se usa toda la despensa
+    const result = await mealService.getDishSuggestions({ userId, mealTime, selectedIngredients });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

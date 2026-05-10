@@ -54,10 +54,14 @@ async function getPantryAnalysis(userId) {
 
 async function getHistory(userId, limit) { return mealRepo.getMealsByUser(userId, limit); }
 
-async function getDishSuggestions({ userId, mealTime }) {
+async function getDishSuggestions({ userId, mealTime, selectedIngredients }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
-  const pantry = await pantryRepo.getPantryByUser(userId);
+  const allPantry = await pantryRepo.getPantryByUser(userId);
+  // Si el usuario seleccionó ingredientes específicos, filtrar la despensa
+  const pantry = (selectedIngredients && selectedIngredients.length > 0)
+    ? allPantry.filter(function(item) { return selectedIngredients.includes(item.name); })
+    : allPantry;
   const mealHistory = await mealRepo.getMealsByUser(userId, 10);
   let workoutContext = null;
   if (user.synergy_enabled) {

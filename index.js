@@ -9,6 +9,7 @@ const pantryRoutes = require('./src/routes/pantryRoutes');
 const visionRoutes = require('./src/routes/visionRoutes');
 const progressRoutes = require('./src/routes/progressRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
+const productRoutes = require('./src/routes/productRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +28,7 @@ app.use('/api/pantry', pantryRoutes);
 app.use('/api/vision', visionRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/admin', adminRoutes);
+app.use('/api/products', productRoutes);
 
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
