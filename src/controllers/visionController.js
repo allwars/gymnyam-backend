@@ -1,8 +1,10 @@
 const { analyzeMealPhoto, scanPantryPhoto } = require('../agents/visionAgent');
 const pantryRepo = require('../repositories/pantryRepository');
+const pantryService = require('../services/pantryService');
 const workoutRepo = require('../repositories/workoutRepository');
 const userRepo = require('../repositories/userRepository');
 const mealRepo = require('../repositories/mealRepository');
+const OpenAI = require('openai');
 
 function getCurrentMealTime() {
   const hour = new Date().getHours();
@@ -62,30 +64,68 @@ async function scanPantry(req, res) {
     const user = await userRepo.getUserById(userId);
     if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
 
+    // Solo detectar — el frontend se encarga de verificar con OFF y añadir a la DB
     const result = await scanPantryPhoto({ imageBase64, mimeType: mimeType || 'image/jpeg' });
 
-    const addedItems = [];
-    for (const item of result.items || []) {
-      const nutritional_info = {
-        calories_per_100g: item.calories_per_100g,
-        protein_per_100g: item.protein_per_100g,
-        carbs_per_100g: item.carbs_per_100g,
-        fat_per_100g: item.fat_per_100g,
-      };
-      const saved = await pantryRepo.addItem({
-        user_id: userId,
-        name: item.name,
-        quantity: item.quantity || null,
-        nutritional_info,
-        added_by: 'camera',
-      });
-      addedItems.push(saved);
-    }
-
-    res.json({ ok: true, added: addedItems, summary: result.summary, count: addedItems.length });
+    res.json({
+      ok: true,
+      image_quality: result.image_quality || 'good',
+      detected: result.items || [],
+      summary: result.summary || '',
+      count: (result.items || []).length,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 }
 
-module.exports = { analyzeMeal, scanPantry };
+// ── Debug: devuelve la respuesta RAW del modelo sin procesar ──
+async function debugVision(req, res) {
+  try {
+    const { imageBase64, mimeType = 'image/jpeg' } = req.body;
+    if (!imageBase64) return res.status(400).json({ ok: false, error: 'Se requiere imageBase64' });
+
+    const groq = new OpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY,
+      timeout: 90000,
+    });
+
+    const model = 'meta-llama/llama-4-scout-17b-16e-instruct';
+    const imageUrl = `data:${mimeType};base64,${imageBase64}`;
+
+    console.log(`[Debug] Enviando imagen al modelo ${model}, base64 length: ${imageBase64.length}`);
+
+    const response = await groq.chat.completions.create({
+      model,
+      max_tokens: 800,
+      temperature: 0,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe everything you can see in this image. List all food products, drinks, and edible items.' },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        },
+      ],
+    });
+
+    const rawText = response.choices[0]?.message?.content || '';
+    console.log(`[Debug] Respuesta raw:\n${rawText}`);
+
+    res.json({
+      ok: true,
+      model,
+      base64_length: imageBase64.length,
+      raw_response: rawText,
+      finish_reason: response.choices[0]?.finish_reason,
+      usage: response.usage,
+    });
+  } catch (err) {
+    console.error('[Debug] Error:', err.message);
+    res.status(500).json({ ok: false, error: err.message, code: err.code });
+  }
+}
+
+module.exports = { analyzeMeal, scanPantry, debugVision };

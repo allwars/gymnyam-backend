@@ -94,22 +94,92 @@ async function analyzePantry({ user, pantry, mealHistory }) {
   return chat(system, 'Analiza esta despensa.\n' + context, 600);
 }
 
+// ── Detecta la cocina dominante según los ingredientes de la despensa ──
+function detectCuisine(pantry) {
+  if (!pantry || !pantry.length) return 'mediterranean';
+  const names = pantry.map(function(p) { return p.name.toLowerCase(); }).join(' ');
+
+  const MEXICAN  = ['tortilla', 'chile', 'jalapeño', 'jalapeno', 'aguacate', 'cilantro', 'frijol', 'tomatillo', 'chipotle', 'guajillo', 'epazote', 'nopal', 'tamarindo', 'achiote'];
+  const ORIENTAL = ['ramen', 'soja', 'salsa de soja', 'miso', 'tofu', 'nori', 'wasabi', 'sriracha', 'hoisin', 'udon', 'soba', 'mirin', 'sake', 'wonton', 'bok choy', 'kimchi', 'dashi', 'gyoza', 'edamame', 'tahini de sésamo', 'vinagre de arroz'];
+  const INDIAN   = ['curry', 'garam masala', 'cúrcuma', 'naan', 'basmati', 'masala', 'cardamomo', 'ghee', 'dal', 'chutney', 'samosa', 'paneer', 'mostaza negra'];
+
+  var mex = MEXICAN.filter(function(w)  { return names.includes(w); }).length;
+  var ori = ORIENTAL.filter(function(w) { return names.includes(w); }).length;
+  var ind = INDIAN.filter(function(w)   { return names.includes(w); }).length;
+
+  if (mex >= 2) return 'mexican';
+  if (ori >= 2) return 'oriental';
+  if (ind >= 2) return 'indian';
+  return 'mediterranean';
+}
+
+const CUISINE_STYLES = {
+  mediterranean: {
+    name: 'mediterránea española',
+    prompt: 'COCINA MEDITERRÁNEA ESPAÑOLA: tortilla española, paella, gazpacho, sofrito, al ajillo, en escabeche, a la plancha, guisos de legumbres, ensalada, revuelto, croquetas. Solo platos reconocibles de la cocina española e italiana. PROHIBIDO inventar platos fusion o combinar ingredientes de culturas distintas.',
+  },
+  mexican: {
+    name: 'mexicana',
+    prompt: 'COCINA MEXICANA CLÁSICA: tacos, quesadillas, enchiladas, burritos, guacamole, chiles rellenos, arroz rojo, frijoles de olla, tostadas. SOLO platos mexicanos auténticos con los ingredientes disponibles. PROHIBIDO mezclar con ingredientes mediterráneos u otras cocinas.',
+  },
+  oriental: {
+    name: 'oriental/asiática',
+    prompt: 'COCINA ORIENTAL CLÁSICA: ramen, arroz frito al wok, gyozas, miso soup, pad thai, stir-fry de verduras, onigiri, fideos. SOLO platos asiáticos auténticos con los ingredientes disponibles. PROHIBIDO mezclar con ingredientes mediterráneos u otras cocinas.',
+  },
+  indian: {
+    name: 'india',
+    prompt: 'COCINA INDIA CLÁSICA: dal, curry de verduras o pollo, biryani, paneer, raita, chapati. SOLO platos indios auténticos con los ingredientes disponibles. PROHIBIDO mezclar con ingredientes de otras cocinas.',
+  },
+};
+
 async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
   const dietContext = buildDietContext(user);
   const diet = DIET_RULES[user.diet_type];
-  const system = 'Eres un dietista y cocinero experto.\n' +
-    (dietContext ? 'RESTRICCIONES ESTRICTAS DE DIETA (OBLIGATORIO CUMPLIR):\n' + dietContext : 'Cocina casera española/mediterránea.') + '\n' +
-    'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '. Platos reales, sencillos, 5-30 min.\n' +
-    'Responde UNICAMENTE con JSON valido:\n{"dishes":[{"name":"string","emoji":"string","description":"string","ingredients":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["string"],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}';
+  const cuisine = detectCuisine(pantry);
+  const cuisineStyle = CUISINE_STYLES[cuisine];
+
+  const pantryList = pantry && pantry.length
+    ? pantry.map(function(p) { return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ')
+    : null;
+
+  const system = [
+    'Eres un cocinero y dietista experto en cocina ' + cuisineStyle.name + '.',
+    '',
+    '══ REGLA ABSOLUTA — DESPENSA ══',
+    'SOLO puedes usar ingredientes que aparezcan EXACTAMENTE en la despensa del usuario.',
+    'PROHIBIDO añadir cualquier ingrediente que no esté en la despensa, aunque sea básico (sal, aceite, agua son las únicas excepciones).',
+    'Si un plato requiere un ingrediente que no está en la despensa, NO lo sugiereas.',
+    '',
+    '══ ESTILO DE COCINA ══',
+    cuisineStyle.prompt,
+    '',
+    '══ PLATOS ══',
+    'Sugiere platos REALES y CLÁSICOS de esta cocina. NO inventes platos nuevos ni hagas fusión.',
+    'El nombre del plato debe ser un plato conocido (ej: "Tortilla española", "Ramen de pollo", "Tacos de atún").',
+    '',
+    dietContext ? '══ DIETA ══\n' + dietContext : '',
+    'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '. Tiempo máximo: 30 min.',
+    '',
+    'Responde UNICAMENTE con JSON valido:',
+    '{"dishes":[{"name":"string","emoji":"string","description":"string","ingredients":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["string"],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}',
+  ].filter(Boolean).join('\n');
+
   const context = [
     'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg, edad ' + user.age + ', sexo ' + user.sex,
     user.allergies ? 'Alergias: ' + user.allergies : '',
-    'Momento: ' + mealTime,
-    pantry && pantry.length ? 'INGREDIENTES DISPONIBLES: ' + pantry.map(function(p){ return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ') : 'Sin despensa — ingredientes básicos.',
-    mealHistory && mealHistory.length ? 'Evitar repetir: ' + mealHistory.slice(0,3).map(function(m){ return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ') : '',
-    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
+    'Momento del día: ' + mealTime,
+    pantryList
+      ? 'DESPENSA (ÚNICOS ingredientes disponibles): ' + pantryList
+      : 'Sin despensa. Sugiere platos básicos de cocina ' + cuisineStyle.name + ' con ingredientes muy comunes.',
+    mealHistory && mealHistory.length
+      ? 'Evitar repetir estos platos recientes: ' + mealHistory.slice(0,3).map(function(m) { return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ')
+      : '',
+    synergy && workoutContext && workoutContext.length
+      ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') + ' — ajusta proteína si es necesario.'
+      : '',
   ].filter(Boolean).join('\n');
-  return chat(system, 'Sugiere 3 platos para ahora.\n' + context, 2000);
+
+  return chat(system, 'Sugiere 3 platos de cocina ' + cuisineStyle.name + ' usando SOLO los ingredientes de la despensa.\n' + context, 2000);
 }
 
 function getDietInfo(dietType) {
