@@ -1,4 +1,4 @@
-const { analyzeMealPhoto, scanPantryPhoto } = require('../agents/visionAgent');
+const { analyzeMealPhoto, scanPantryPhoto, analyzeProductPhoto } = require('../agents/visionAgent');
 const pantryRepo = require('../repositories/pantryRepository');
 const pantryService = require('../services/pantryService');
 const workoutRepo = require('../repositories/workoutRepository');
@@ -128,4 +128,15 @@ async function debugVision(req, res) {
   }
 }
 
-module.exports = { analyzeMeal, scanPantry, debugVision };
+async function analyzeProduct(req, res) {
+  try {
+    const { imageBase64, mimeType } = req.body;
+    if (!imageBase64) return res.status(400).json({ ok: false, error: 'Se requiere imageBase64' });
+    const product = await analyzeProductPhoto({ imageBase64, mimeType: mimeType || 'image/jpeg' });
+    res.json({ ok: true, product });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+module.exports = { analyzeMeal, scanPantry, debugVision, analyzeProduct };

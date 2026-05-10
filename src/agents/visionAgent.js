@@ -288,4 +288,66 @@ function parseQuality(text) {
   return 'good';
 }
 
-module.exports = { analyzeMealPhoto, scanPantryPhoto };
+// ─────────────────────────────────────────────
+// ANÁLISIS DE ETIQUETA DE PRODUCTO
+// ─────────────────────────────────────────────
+async function analyzeProductPhoto({ imageBase64, mimeType = 'image/jpeg' }) {
+  const prompt = `Look at this food product label or package carefully.
+Extract all the information you can read and respond with ONLY valid JSON (no markdown, no extra text):
+{
+  "name": "product name in Spanish",
+  "brand": "brand name or null",
+  "calories": 0,
+  "protein": 0,
+  "carbs": 0,
+  "fat": 0,
+  "fiber": 0,
+  "sugar": 0,
+  "salt": 0,
+  "ingredients": "full ingredients list as text in Spanish, or null"
+}
+
+Rules:
+- All nutritional values must be per 100g or 100ml
+- If a value is not visible or readable, use 0
+- For the ingredients field, copy the full text list if visible, otherwise null
+- Respond with ONLY the JSON object, absolutely no other text`;
+
+  const imageUrl = `data:${mimeType};base64,${imageBase64}`;
+
+  for (const model of SCAN_MODELS) {
+    try {
+      console.log(`[Vision] analyzeProduct con ${model}`);
+      const text = await callVision(model, [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ],
+        },
+      ], 700);
+
+      console.log(`[Vision] analyzeProduct respuesta: ${text.slice(0, 300)}`);
+      const data = extractJson(text);
+      return {
+        name: (data.name || '').trim(),
+        brand: data.brand && data.brand !== 'null' ? String(data.brand).trim() : null,
+        calories: Number(data.calories) || 0,
+        protein: Number(data.protein) || 0,
+        carbs: Number(data.carbs) || 0,
+        fat: Number(data.fat) || 0,
+        fiber: Number(data.fiber) || 0,
+        sugar: Number(data.sugar) || 0,
+        salt: Number(data.salt) || 0,
+        ingredients: data.ingredients && data.ingredients !== 'null' ? String(data.ingredients).trim() : null,
+      };
+    } catch (err) {
+      console.error(`[Vision] analyzeProduct error con ${model}:`, err.message);
+    }
+  }
+
+  throw new Error('No se pudo analizar la imagen del producto. Intenta con mejor iluminación.');
+}
+
+module.exports = { analyzeMealPhoto, scanPantryPhoto, analyzeProductPhoto };

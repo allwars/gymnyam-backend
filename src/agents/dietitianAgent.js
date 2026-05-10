@@ -132,35 +132,72 @@ const CUISINE_STYLES = {
   },
 };
 
+// ── Valida que los ingredientes del plato estén en la despensa ──
+// Elimina los que no están (sal, aceite, agua y pimienta siempre permitidos)
+function validateDishes(dishes, pantry) {
+  const ALWAYS_OK = ['sal', 'aceite', 'agua', 'pimienta', 'vinagre'];
+  const pantryNames = (pantry || []).map(function(p) { return p.name.toLowerCase(); });
+
+  function isAllowed(ingredientName) {
+    const lower = (ingredientName || '').toLowerCase();
+    if (ALWAYS_OK.some(function(ok) { return lower.includes(ok); })) return true;
+    // Match si el nombre del ingrediente contiene algún item de la despensa o viceversa
+    return pantryNames.some(function(pn) {
+      return lower.includes(pn) || pn.includes(lower);
+    });
+  }
+
+  var validated = (dishes || [])
+    .map(function(dish) {
+      var filteredIngredients = (dish.ingredients || []).filter(function(ing) {
+        return isAllowed(ing.name);
+      });
+      return Object.assign({}, dish, { ingredients: filteredIngredients });
+    })
+    .filter(function(dish) { return dish.ingredients && dish.ingredients.length > 0; });
+
+  return validated;
+}
+
 async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
   const dietContext = buildDietContext(user);
   const diet = DIET_RULES[user.diet_type];
   const cuisine = detectCuisine(pantry);
   const cuisineStyle = CUISINE_STYLES[cuisine];
 
-  const pantryList = pantry && pantry.length
-    ? pantry.map(function(p) { return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ')
-    : null;
+  // Lista numerada de ingredientes — formato explícito para el modelo
+  var pantryNumbered = null;
+  var pantryNames = [];
+  if (pantry && pantry.length) {
+    pantryNames = pantry.map(function(p) { return p.name; });
+    pantryNumbered = pantryNames.map(function(name, i) {
+      return (i + 1) + '. ' + name;
+    }).join('\n');
+  }
 
   const system = [
-    'Eres un cocinero y dietista experto en cocina ' + cuisineStyle.name + '.',
+    'Eres un cocinero experto en cocina ' + cuisineStyle.name + '.',
     '',
-    '══ REGLA ABSOLUTA — DESPENSA ══',
-    'SOLO puedes usar ingredientes que aparezcan EXACTAMENTE en la despensa del usuario.',
-    'PROHIBIDO añadir cualquier ingrediente que no esté en la despensa, aunque sea básico (sal, aceite, agua son las únicas excepciones).',
-    'Si un plato requiere un ingrediente que no está en la despensa, NO lo sugiereas.',
+    '╔══════════════════════════════════════╗',
+    '║  REGLA CRÍTICA — DESPENSA            ║',
+    '╚══════════════════════════════════════╝',
+    'Los ingredientes de CADA plato deben ser ÚNICAMENTE los de la lista de ingredientes permitidos.',
+    'QUEDA TERMINANTEMENTE PROHIBIDO añadir cualquier ingrediente que NO aparezca en esa lista.',
+    'Las únicas excepciones absolutas son: sal, aceite, agua y pimienta.',
+    'Si un plato necesita un ingrediente que no está en la lista → NO sugieras ese plato.',
+    'Si el plato solo puede hacerse con ingredientes de la lista → SÍ lo sugieras.',
     '',
     '══ ESTILO DE COCINA ══',
     cuisineStyle.prompt,
     '',
     '══ PLATOS ══',
-    'Sugiere platos REALES y CLÁSICOS de esta cocina. NO inventes platos nuevos ni hagas fusión.',
-    'El nombre del plato debe ser un plato conocido (ej: "Tortilla española", "Ramen de pollo", "Tacos de atún").',
+    'Sugiere 3 platos REALES y CLÁSICOS de esta cocina usando los ingredientes disponibles.',
+    'NO inventes platos nuevos. NO hagas fusión de cocinas.',
     '',
     dietContext ? '══ DIETA ══\n' + dietContext : '',
-    'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '. Tiempo máximo: 30 min.',
+    'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '.',
     '',
-    'Responde UNICAMENTE con JSON valido:',
+    'Responde ÚNICAMENTE con este JSON válido (sin texto adicional):',
     '{"dishes":[{"name":"string","emoji":"string","description":"string","ingredients":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["string"],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}',
   ].filter(Boolean).join('\n');
 
@@ -168,18 +205,29 @@ async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, wor
     'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg, edad ' + user.age + ', sexo ' + user.sex,
     user.allergies ? 'Alergias: ' + user.allergies : '',
     'Momento del día: ' + mealTime,
-    pantryList
-      ? 'DESPENSA (ÚNICOS ingredientes disponibles): ' + pantryList
-      : 'Sin despensa. Sugiere platos básicos de cocina ' + cuisineStyle.name + ' con ingredientes muy comunes.',
+    pantryNumbered
+      ? '═══ LISTA COMPLETA DE INGREDIENTES PERMITIDOS (Y SOLO ESTOS) ═══\n' + pantryNumbered + '\n═══════════════════════════════════════════════════════════════'
+      : 'Sin despensa. Sugiere platos básicos de cocina ' + cuisineStyle.name + '.',
     mealHistory && mealHistory.length
-      ? 'Evitar repetir estos platos recientes: ' + mealHistory.slice(0,3).map(function(m) { return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ')
+      ? 'Evitar repetir: ' + mealHistory.slice(0,3).map(function(m) { return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ')
       : '',
     synergy && workoutContext && workoutContext.length
-      ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') + ' — ajusta proteína si es necesario.'
+      ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') + ' — prioriza proteína.'
       : '',
   ].filter(Boolean).join('\n');
 
-  return chat(system, 'Sugiere 3 platos de cocina ' + cuisineStyle.name + ' usando SOLO los ingredientes de la despensa.\n' + context, 2000);
+  var userMsg = '━━━ RECUERDA: usa ÚNICAMENTE los ingredientes de la lista. ━━━\n'
+    + 'Sugiere 3 platos de cocina ' + cuisineStyle.name + '.\n' + context;
+
+  // Temperatura 0 para máxima adherencia a las instrucciones
+  var result = await chat(system, userMsg, 2000, 0);
+
+  // Post-procesado: eliminar cualquier ingrediente no permitido que el modelo haya añadido
+  if (result && result.dishes && pantry && pantry.length) {
+    result.dishes = validateDishes(result.dishes, pantry);
+  }
+
+  return result;
 }
 
 function getDietInfo(dietType) {

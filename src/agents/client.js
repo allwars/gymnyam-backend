@@ -31,14 +31,14 @@ function extractJson(text) {
   }
 }
 
-async function chat(systemPrompt, userPrompt, maxTokens = 2000) {
+async function chat(systemPrompt, userPrompt, maxTokens = 2000, temperature = 0.7) {
   const resp = await getClient().chat.completions.create({
     model: MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
-    temperature: 0.7,
+    temperature,
     max_tokens: maxTokens,
   });
   const text = resp.choices[0]?.message?.content || '';
