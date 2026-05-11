@@ -4,8 +4,8 @@ const workoutRepo = require('../repositories/workoutRepository');
 async function generate(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const { sport, level } = req.body;
-    const workout = await workoutService.generateAndSave({ userId, sport, level });
+    const { level, checkin } = req.body;
+    const workout = await workoutService.generateAndSave({ userId, level, checkin });
     res.json({ ok: true, workout });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
