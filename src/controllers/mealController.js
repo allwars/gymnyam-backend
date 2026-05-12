@@ -60,8 +60,8 @@ async function updateMeal(req, res) {
   try {
     const mealId = Number(req.params.mealId);
     const userId = Number(req.query.userId);
-    const { meal_time, advice } = req.body;
-    const meal = await mealRepo.updateMeal(mealId, userId, { meal_time, advice });
+    const { meal_time, advice, foods } = req.body;
+    const meal = await mealRepo.updateMeal(mealId, userId, { meal_time, advice, foods });
     if (!meal) return res.status(404).json({ ok: false, error: 'Comida no encontrada' });
     res.json({ ok: true, meal });
   } catch (err) {

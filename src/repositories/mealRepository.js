@@ -46,6 +46,18 @@ async function updateMeal(id, userId, data) {
   const update = {};
   if (data.meal_time !== undefined) update.meal_time = data.meal_time;
   if (data.advice !== undefined) update.advice = data.advice;
+  if (data.foods !== undefined) {
+    // Normalizar: kcal y protein vacíos → null; nombre siempre string
+    update.foods = data.foods
+      .filter(f => f.name?.trim())
+      .map(f => ({
+        ...f,
+        name: String(f.name).trim(),
+        quantity: f.quantity ? String(f.quantity).trim() : null,
+        calories: f.calories !== '' && f.calories != null ? Number(f.calories) || null : null,
+        protein:  f.protein  !== '' && f.protein  != null ? Number(f.protein)  || null : null,
+      }));
+  }
   if (!Object.keys(update).length) return getMealById(id);
   const { data: meal, error } = await supabase
     .from('meals').update(update).eq('id', id).eq('user_id', userId).select().single();
