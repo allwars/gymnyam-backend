@@ -224,7 +224,8 @@ async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, wor
     'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '.',
     '',
     'Responde ÚNICAMENTE con este JSON válido (sin texto adicional):',
-    '{"dishes":[{"name":"string","emoji":"string","description":"string","ingredients":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["string"],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}',
+    '{"dishes":[{"name":"NOMBRE DEL PLATO (ej: Tortilla española)","emoji":"🍳","description":"Descripción breve del plato","ingredients":[{"name":"NOMBRE DEL INGREDIENTE (ej: Huevo, Pan integral, Crema de cacahuete — NUNCA el nombre del plato)","quantity":"2 uds","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["Paso 1..."],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}',
+    'IMPORTANTE: ingredients[].name = nombre del INGREDIENTE, NUNCA el nombre del plato. Ejemplo incorrecto: "Sandwich de crema de cacahuete". Ejemplo correcto: "Pan de molde", "Crema de cacahuete", "Sal gorda".',
   ].filter(Boolean).join('\n');
 
   const context = [
