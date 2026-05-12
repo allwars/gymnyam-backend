@@ -54,6 +54,28 @@ function buildDietContext(user) {
   return lines.join('\n');
 }
 
+/**
+ * Genera el contexto de entrenamiento enriquecido para el prompt del dietista.
+ * Antes solo se pasaba 'CrossFit'. Ahora incluye tipo, foco y duración.
+ */
+function buildSynergyCtx(w) {
+  if (!w) return '';
+  const focus = w.session_focus === 'strength'
+    ? 'Día de FUERZA → priorizar proteína (2.0-2.2g/kg), carbos moderados post-entreno.'
+    : w.session_focus === 'skill'
+    ? 'Día de TÉCNICA/SKILL → proteína normal, carbos equilibrados.'
+    : 'Día de METCON (alta intensidad) → priorizar carbohidratos de recuperación + proteína rápida post-entreno.';
+  const parts = [
+    'Entrenamiento de hoy: ' + (w.sport || 'CrossFit'),
+    w.wod_type ? 'Tipo WOD: ' + w.wod_type : '',
+    w.wod_format ? 'Formato: ' + w.wod_format : '',
+    w.difficulty ? 'Intensidad: ' + w.difficulty : '',
+    w.estimated_duration ? 'Duración: ' + w.estimated_duration : '',
+    focus,
+  ].filter(Boolean).join(' | ');
+  return parts;
+}
+
 async function suggestMeal({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
   const dietContext = buildDietContext(user);
   const diet = DIET_RULES[user.diet_type];
@@ -66,7 +88,9 @@ async function suggestMeal({ user, mealTime, pantry, mealHistory, synergy, worko
     user.allergies ? 'Alergias: ' + user.allergies : '',
     'Momento: ' + mealTime,
     pantry && pantry.length ? 'USA ESTOS ingredientes: ' + pantry.map(function(p){ return p.name + (p.quantity ? ' (' + p.quantity + ')' : ''); }).join(', ') : 'Sin despensa, sugiere algo simple.',
-    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
+    synergy && workoutContext && workoutContext.length
+      ? buildSynergyCtx(workoutContext[0])
+      : '',
   ].filter(Boolean).join('\n');
   return chat(system, 'Sugiere qué comer ahora.\n' + context, 1000);
 }
@@ -80,7 +104,9 @@ async function analyzeExternalMeal({ user, description, synergy, workoutContext 
     'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg',
     user.allergies ? 'Alergias: ' + user.allergies : '',
     'Comida a analizar: ' + description,
-    synergy && workoutContext && workoutContext.length ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') : '',
+    synergy && workoutContext && workoutContext.length
+      ? buildSynergyCtx(workoutContext[0])
+      : '',
   ].filter(Boolean).join('\n');
   return chat(system, context, 800);
 }
@@ -212,7 +238,7 @@ async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, wor
       ? 'Evitar repetir: ' + mealHistory.slice(0,3).map(function(m) { return m.advice || (m.foods && m.foods[0] && m.foods[0].name); }).filter(Boolean).join(', ')
       : '',
     synergy && workoutContext && workoutContext.length
-      ? 'Entrenamiento hoy: ' + (workoutContext[0].sport || 'ejercicio') + ' — prioriza proteína.'
+      ? buildSynergyCtx(workoutContext[0])
       : '',
   ].filter(Boolean).join('\n');
 

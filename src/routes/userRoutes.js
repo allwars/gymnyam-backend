@@ -10,6 +10,7 @@ router.patch('/:id/sports', ctrl.updateSports);
 router.patch('/:id/goal', ctrl.updateGoal);
 router.patch('/:id/profile', ctrl.updateProfile);
 router.patch('/:id/diet', ctrl.updateDiet);
+router.get('/:id/tdee', ctrl.getTDEE);
 router.delete('/:id', ctrl.deleteAccount);
 
 module.exports = router;

@@ -4,6 +4,43 @@ const pantryRepo = require('../repositories/pantryRepository');
 const workoutRepo = require('../repositories/workoutRepository');
 const userRepo = require('../repositories/userRepository');
 
+/**
+ * Genera una clave canónica para un nombre de plato:
+ * - minúsculas + sin acentos
+ * - elimina stopwords de relleno ("con", "y", "de", "al", ...)
+ * - ordena las palabras restantes alfabéticamente
+ *
+ * Así "arroz con aguacate" y "aguacate con arroz" producen la misma clave
+ * y se identifican como duplicados.
+ */
+const STOP = new Set(['con','y','de','del','al','a','la','el','los','las','en','sin','o','u','e','un','una','unos','unas']);
+
+function dishKey(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita acentos
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP.has(w))
+    .sort()
+    .join('|');
+}
+
+/**
+ * Elimina platos con el mismo nombre canónico dentro de un array.
+ * Conserva el primero que aparece.
+ */
+function deduplicateDishes(dishes) {
+  const seen = new Set();
+  return dishes.filter(d => {
+    const k = dishKey(d.name);
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 function getCurrentMealTime() {
   const hour = new Date().getHours();
   if (hour < 10) return 'desayuno';
@@ -11,6 +48,24 @@ function getCurrentMealTime() {
   if (hour < 15) return 'almuerzo';
   if (hour < 18) return 'merienda';
   return 'cena';
+}
+
+/**
+ * Construye el contexto de entrenamiento enriquecido para el dietista.
+ * En lugar de pasar solo { sport: 'CrossFit' }, pasa tipo de WOD,
+ * duración estimada e intensidad — el dietista ajusta macros en consecuencia.
+ */
+function buildWorkoutContext(workouts) {
+  if (!workouts || !workouts.length) return null;
+  return workouts.map(w => ({
+    sport:              w.sport || 'CrossFit',
+    wod_type:           w.wod_type || null,      // AMRAP | EMOM | For Time | Chipper | Strength+WOD
+    wod_format:         w.wod_format || null,
+    estimated_duration: w.estimated_duration || null,
+    difficulty:         w.difficulty || null,    // Principiante | Intermedio | Avanzado
+    // Indica al dietista si fue un día de fuerza (más proteína) o metcon (más carbos)
+    session_focus:      w.strength_block && !w.wod ? 'strength' : w.wod_type === 'EMOM' ? 'skill' : 'metcon',
+  }));
 }
 
 async function suggest({ userId, mealTime }) {
@@ -22,7 +77,8 @@ async function suggest({ userId, mealTime }) {
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
     const all = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = all.filter(w => String(w.date).split('T')[0] === today);
+    const todayWorkouts = all.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = buildWorkoutContext(todayWorkouts);
   }
   const mt = mealTime || getCurrentMealTime();
   const suggestion = await suggestMeal({ user, mealTime: mt, pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext });
@@ -36,7 +92,8 @@ async function analyzeExternal({ userId, description, mealTime }) {
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
     const all = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = all.filter(w => String(w.date).split('T')[0] === today);
+    const todayWorkouts = all.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = buildWorkoutContext(todayWorkouts);
   }
   const mt = mealTime || getCurrentMealTime();
   const analysis = await analyzeExternalMeal({ user, description, synergy: !!user.synergy_enabled, workoutContext });
@@ -67,11 +124,12 @@ async function getDishSuggestions({ userId, mealTime, selectedIngredients }) {
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
     const all = await workoutRepo.getWorkoutsByUser(userId, 5);
-    workoutContext = all.filter(w => String(w.date).split('T')[0] === today);
+    workoutContext = buildWorkoutContext(all.filter(w => String(w.date).split('T')[0] === today));
   }
   const mt = mealTime || getCurrentMealTime();
   const result = await suggestDishes({ user, mealTime: mt, pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext });
-  return { dishes: result.dishes || [], mealTime: mt };
+  const dishes = deduplicateDishes(result.dishes || []);
+  return { dishes, mealTime: mt };
 }
 
 async function confirmDish({ userId, mealTime, dish }) {

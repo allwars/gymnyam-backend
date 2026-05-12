@@ -1,4 +1,5 @@
 const userService = require('../services/userService');
+const { calculateTDEE } = require('../services/tdeeService');
 
 const VALID_DIETS = [
   'keto','paleo','intermittent_fasting','low_carb','carnivore','whole30',
@@ -48,7 +49,9 @@ async function getProfile(req, res) {
   try {
     const user = await userService.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
-    res.json({ ok: true, user });
+    // Incluir TDEE calculado en la respuesta si el usuario tiene los datos necesarios
+    const tdee = (user.weight && user.height && user.age) ? calculateTDEE(user) : null;
+    res.json({ ok: true, user, tdee });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -146,4 +149,17 @@ async function updateDiet(req, res) {
   }
 }
 
-module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount };
+async function getTDEE(req, res) {
+  try {
+    const user = await userService.getUser(Number(req.params.id));
+    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    if (!user.weight || !user.height || !user.age)
+      return res.status(400).json({ ok: false, error: 'Faltan datos para calcular el TDEE (peso, altura, edad).' });
+    const tdee = calculateTDEE(user);
+    res.json({ ok: true, tdee });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getTDEE };

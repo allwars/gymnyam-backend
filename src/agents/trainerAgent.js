@@ -46,7 +46,7 @@ Responde ÚNICAMENTE con JSON válido sin texto adicional:
   "wod": {
     "type": "AMRAP|EMOM|For Time|Chipper",
     "format": "string",
-    "time_cap": "string o null",
+    "time_cap": "OBLIGATORIO si type es 'For Time', 'Chipper' o 'Hero WOD' (ej: '20 min'). null solo para AMRAP y EMOM.",
     "movements": [
       {
         "name": "string",
@@ -70,6 +70,8 @@ Responde ÚNICAMENTE con JSON válido sin texto adicional:
 REGLAS:
 - difficulty DEBE ser exactamente "${resolvedLevel}"
 - strength_block puede ser null
+- time_cap es OBLIGATORIO (nunca null) en WODs For Time, Chipper y Hero WOD. Rango: 12-30 min según intensidad.
+- Para AMRAP y EMOM: time_cap debe ser null (el formato ya define la duración).
 - image_query siempre en inglés y descriptivo para buscar imágenes técnicas
 - Movimientos CrossFit reales: thruster, burpee, double under, pull-up, toes-to-bar, deadlift, clean, snatch, box jump, wall ball, kettlebell swing, ring muscle-up, handstand push-up, row, assault bike, etc.
 - SIEMPRE incluir scaling para los 3 niveles

@@ -58,7 +58,7 @@ async function updateSports(userId, sports) {
   await supabase.from('sports').delete().eq('user_id', userId);
   if (sports.length > 0) {
     const { error } = await supabase.from('sports').insert(
-      sports.map(s => ({ user_id: userId, name: s.name, level: s.level || null, schedule: s.schedule || null }))
+      sports.map(s => ({ user_id: userId, name: s.name, level: s.level || 'Intermedio', schedule: s.schedule || null }))
     );
     if (error) throw new Error(error.message);
   }
