@@ -134,7 +134,8 @@ async function getDishSuggestions({ userId, mealTime, selectedIngredients }) {
 
 async function confirmDish({ userId, mealTime, dish }) {
   const mt = mealTime || getCurrentMealTime();
-  return mealRepo.saveMeal({ user_id: userId, meal_time: mt, type: 'suggestion', foods: dish.ingredients || [], nutritional_info: dish.nutritional_info || {}, advice: (dish.name || '') + (dish.description ? ' · ' + dish.description : ''), score: dish.score || null });
+  const nutritional_info = { ...(dish.nutritional_info || {}), dish_name: dish.name || null };
+  return mealRepo.saveMeal({ user_id: userId, meal_time: mt, type: 'suggestion', foods: dish.ingredients || [], nutritional_info, advice: dish.description || '', score: dish.score || null });
 }
 
 module.exports = { suggest, analyzeExternal, getPantryAnalysis, getHistory, getDishSuggestions, confirmDish };
