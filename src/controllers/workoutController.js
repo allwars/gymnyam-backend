@@ -26,8 +26,9 @@ async function getHistory(req, res) {
 async function saveNotes(req, res) {
   try {
     const workoutId = Number(req.params.workoutId);
+    const userId = Number(req.query.userId);
     const { notes } = req.body;
-    const workout = await workoutService.saveNotes(workoutId, notes);
+    const workout = await workoutService.saveNotes(workoutId, userId, notes);
     res.json({ ok: true, workout });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

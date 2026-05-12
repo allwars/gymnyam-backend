@@ -18,17 +18,22 @@ async function generateAndSave({ userId, level, checkin }) {
   if (user.synergy_enabled) {
     const today = new Date().toISOString().split('T')[0];
     const allMeals = await mealRepo.getMealsByUser(userId, 10);
-    mealContext = allMeals.filter(m => String(m.date).split('T')[0] === today);
+    mealContext = allMeals.filter(m => m.date && m.date.toString().split('T')[0] === today);
   }
 
-  const plan = await generateWorkout({
-    user,
-    history,
-    level: resolvedLevel,
-    synergy: !!user.synergy_enabled,
-    mealContext,
-    checkin: checkin || null,
-  });
+  let plan;
+  try {
+    plan = await generateWorkout({
+      user,
+      history,
+      level: resolvedLevel,
+      synergy: !!user.synergy_enabled,
+      mealContext,
+      checkin: checkin || null,
+    });
+  } catch (e) {
+    throw new Error(`Error generando WOD con IA: ${e.message}`);
+  }
 
   // Guardar el WOD completo: exercises contiene los movimientos del WOD
   const wodMovements = plan.wod?.movements || plan.exercises || [];

@@ -77,7 +77,7 @@ REGLAS:
 - Warmup debe activar específicamente los músculos del WOD`;
 
   const userCtx = [
-    `Perfil: edad ${user.age}, sexo ${user.sex}, peso ${user.weight}kg, objetivo: ${user.goal}, sueño: ${user.sleep_hours}h`,
+    `Perfil: edad ${user.age || 'N/D'}, sexo ${user.sex || 'N/D'}, peso ${user.weight || 'N/D'}kg, objetivo: ${user.goal || 'salud general'}, sueño: ${user.sleep_hours || 7}h`,
     user.injuries ? `Lesiones/limitaciones: ${user.injuries} → adaptar movimientos` : '',
     `Nivel CrossFit: ${resolvedLevel}`,
     checkinCtx,
