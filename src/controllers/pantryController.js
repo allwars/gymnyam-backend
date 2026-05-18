@@ -53,4 +53,15 @@ async function lookupNutrition(req, res) {
   }
 }
 
-module.exports = { getAll, addItem, updateItem, deleteItem, lookupNutrition };
+async function uploadImage(req, res) {
+  try {
+    const userId = Number(req.params.userId);
+    const itemId = Number(req.params.itemId);
+    const item   = await pantryService.uploadImage(userId, itemId, req.file);
+    res.json({ ok: true, item });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+module.exports = { getAll, addItem, updateItem, deleteItem, lookupNutrition, uploadImage };

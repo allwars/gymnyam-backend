@@ -1,5 +1,8 @@
 const pantryRepo = require('../repositories/pantryRepository');
-const { chat } = require('../agents/client');
+const { chat }   = require('../agents/client');
+const supabase   = require('../db/supabase');
+
+const BUCKET = 'images';
 
 async function getAll(userId) {
   return pantryRepo.getPantryByUser(userId);
@@ -46,4 +49,24 @@ async function lookupNutrition(userId, itemId) {
   return pantryRepo.updateItem(itemId, userId, { nutritional_info });
 }
 
-module.exports = { getAll, addItem, updateItem, deleteItem, lookupNutrition };
+async function uploadImage(userId, itemId, file) {
+  if (!file) throw new Error('No se recibió ningún archivo');
+  const item = await pantryRepo.getItemById(itemId);
+  if (!item || item.user_id !== userId) throw new Error('Alimento no encontrado');
+
+  const ext  = file.mimetype === 'image/png' ? 'png' : 'jpg';
+  const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const path = `user_${userId}_${slug}_${itemId}.${ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file.buffer, { contentType: file.mimetype, upsert: true });
+  if (upErr) throw new Error(upErr.message);
+
+  const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+  const nutritional_info = { ...(item.nutritional_info || {}), off_image: publicUrl };
+  return pantryRepo.updateItem(itemId, userId, { nutritional_info });
+}
+
+module.exports = { getAll, addItem, updateItem, deleteItem, lookupNutrition, uploadImage };
