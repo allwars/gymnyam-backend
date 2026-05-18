@@ -49,54 +49,8 @@ async function addProduct(data) {
     .select()
     .single();
 
-  if (error) {
-    // Barcode unique conflict — update instead
-    if (error.code === '23505' && data.barcode) {
-      return upsertFromOFF({ code: data.barcode, product_name: data.name, brands: data.brand }, data.nutritional_info);
-    }
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return product;
 }
 
-async function upsertFromOFF(offProduct, nutritionalInfo) {
-  const barcode = offProduct.code || offProduct.barcode || null;
-  const name = (offProduct.product_name || '').trim();
-  if (!name) return null;
-
-  const brand = offProduct.brands ? offProduct.brands.split(',')[0].trim() : null;
-  const searchTerms = [name, brand].filter(Boolean).join(' ').toLowerCase();
-
-  const record = {
-    name,
-    brand,
-    quantity_str: offProduct.quantity || null,
-    nutritional_info: nutritionalInfo || {},
-    source: 'off',
-    search_terms: searchTerms,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (barcode) {
-    record.barcode = barcode;
-    // Upsert on barcode conflict
-    const { data, error } = await supabase
-      .from('custom_products')
-      .upsert({ ...record, barcode }, { onConflict: 'barcode' })
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
-    return data;
-  } else {
-    // No barcode — try insert, ignore duplicate (same name may already exist)
-    const { data, error } = await supabase
-      .from('custom_products')
-      .insert(record)
-      .select()
-      .single();
-    if (error && error.code !== '23505') throw new Error(error.message);
-    return data || null;
-  }
-}
-
-module.exports = { searchProducts, getByBarcode, addProduct, upsertFromOFF };
+module.exports = { searchProducts, getByBarcode, addProduct };

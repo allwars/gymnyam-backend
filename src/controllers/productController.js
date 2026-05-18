@@ -34,15 +34,4 @@ async function addManual(req, res) {
   }
 }
 
-async function importFromOFF(req, res) {
-  try {
-    const { offProduct, nutritionalInfo } = req.body;
-    if (!offProduct) return res.status(400).json({ ok: false, error: 'Producto OFF requerido' });
-    const product = await productRepo.upsertFromOFF(offProduct, nutritionalInfo);
-    res.json({ ok: true, product });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-}
-
-module.exports = { search, getByBarcode, addManual, importFromOFF };
+module.exports = { search, getByBarcode, addManual };
