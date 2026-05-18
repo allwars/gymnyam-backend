@@ -37,6 +37,7 @@ async function updateItem(id, userId, data) {
   if (data.name !== undefined) update.name = data.name;
   if (data.quantity !== undefined) update.quantity = data.quantity;
   if (data.nutritional_info !== undefined) update.nutritional_info = data.nutritional_info;
+  if (data.barcode !== undefined) update.barcode = data.barcode;
   if (!Object.keys(update).length) return getItemById(id);
   const { data: item, error } = await supabase
     .from('pantry').update(update).eq('id', id).eq('user_id', userId).select().single();
