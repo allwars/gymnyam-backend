@@ -53,4 +53,18 @@ async function addProduct(data) {
   return product;
 }
 
-module.exports = { searchProducts, getByBarcode, addProduct };
+async function updateBarcodeByName(name, barcode) {
+  if (!name || !barcode) return null;
+  // Solo actualiza si el producto existe y no tiene barcode aún
+  const { data, error } = await supabase
+    .from('custom_products')
+    .update({ barcode })
+    .ilike('name', name.trim())
+    .is('barcode', null)
+    .select()
+    .maybeSingle();
+  if (error) console.warn('updateBarcodeByName:', error.message);
+  return data || null;
+}
+
+module.exports = { searchProducts, getByBarcode, addProduct, updateBarcodeByName };

@@ -13,7 +13,64 @@ async function addItem(userId, data) {
 }
 
 async function updateItem(userId, itemId, data) {
-  return pantryRepo.updateItem(itemId, userId, data);
+  const item = await pantryRepo.updateItem(itemId, userId, data);
+  // Propagar datos a custom_products en background (sin bloquear respuesta)
+  if (item?.name && data.nutritional_info) {
+    enrichCustomProduct(item.name, data.nutritional_info).catch(() => {});
+  }
+  return item;
+}
+
+// Enriquece custom_products con los datos reales aportados por el usuario en pantry
+async function enrichCustomProduct(name, ni) {
+  if (!name || !ni) return;
+
+  // Buscar el producto por nombre (case-insensitive)
+  const { data: cp } = await supabase
+    .from('custom_products')
+    .select('id, barcode, nutritional_info')
+    .ilike('name', name.trim())
+    .maybeSingle();
+
+  if (!cp) return; // producto no existe en custom_products, nada que enriquecer
+
+  const updates = {};
+
+  // Barcode — solo si no tiene
+  if (!cp.barcode && ni.off_barcode) {
+    updates.barcode = ni.off_barcode;
+  }
+
+  // Macros — solo los campos que custom_products no tiene aún
+  const cpNi = cp.nutritional_info || {};
+  const macroFields = [
+    'calories_per_100g', 'protein_per_100g', 'carbs_per_100g', 'fat_per_100g',
+    'fiber_per_100g', 'sugar_per_100g', 'saturated_fat_per_100g', 'salt_per_100g',
+    'score', 'score_label', 'off_nova', 'off_nutriscore',
+  ];
+  const newNi = { ...cpNi };
+  let niChanged = false;
+  for (const field of macroFields) {
+    if (cpNi[field] == null && ni[field] != null) {
+      newNi[field] = ni[field];
+      niChanged = true;
+    }
+  }
+  // Imagen — solo si no tiene URL de supabase storage
+  if (ni.off_image?.includes('supabase.co/storage') &&
+      !cpNi.off_image?.includes('supabase.co/storage')) {
+    newNi.off_image = ni.off_image;
+    niChanged = true;
+  }
+
+  if (niChanged) updates.nutritional_info = newNi;
+
+  if (Object.keys(updates).length === 0) return;
+
+  await supabase
+    .from('custom_products')
+    .update(updates)
+    .eq('id', cp.id);
 }
 
 async function deleteItem(userId, itemId) {
@@ -66,7 +123,9 @@ async function uploadImage(userId, itemId, file) {
   const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path);
 
   const nutritional_info = { ...(item.nutritional_info || {}), off_image: publicUrl };
-  return pantryRepo.updateItem(itemId, userId, { nutritional_info });
+  const updated = await pantryRepo.updateItem(itemId, userId, { nutritional_info });
+  enrichCustomProduct(item.name, { off_image: publicUrl }).catch(() => {});
+  return updated;
 }
 
 module.exports = { getAll, addItem, updateItem, deleteItem, lookupNutrition, uploadImage };
