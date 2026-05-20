@@ -21,6 +21,40 @@ app.use('/admin/static', express.static(require('path').join(__dirname, 'src/vie
 
 app.get('/health', (req, res) => res.json({ ok: true, message: 'GymNYam backend running' }));
 
+// ── Google OAuth relay ────────────────────────────────────────────────────────
+const GOOGLE_WEB_CLIENT_ID     = '635019127213-736epbv9l4tb2bmnurpf37mra9e3pp3s.apps.googleusercontent.com';
+const GOOGLE_WEB_CLIENT_SECRET = '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';
+const GOOGLE_REDIRECT_URI      = 'https://gymnyam-backend-production.up.railway.app/auth/google/callback';
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) {
+    return res.redirect('gymnyam://oauth2redirect?error=' + encodeURIComponent(error || 'no_code'));
+  }
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_WEB_CLIENT_ID,
+        client_secret: GOOGLE_WEB_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+    const data = await tokenRes.json();
+    if (data.access_token) {
+      return res.redirect(
+        `gymnyam://oauth2redirect?access_token=${encodeURIComponent(data.access_token)}&expires_in=${data.expires_in || 3600}`
+      );
+    }
+    return res.redirect('gymnyam://oauth2redirect?error=' + encodeURIComponent(JSON.stringify(data)));
+  } catch (e) {
+    return res.redirect('gymnyam://oauth2redirect?error=' + encodeURIComponent(e.message));
+  }
+});
+
 app.use('/api/users', userRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/meals', mealRoutes);
