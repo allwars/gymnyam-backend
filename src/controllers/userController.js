@@ -9,11 +9,22 @@ const VALID_DIETS = [
   'low_fodmap_sibo','anti_inflammatory','aip','hcg','military','egg_diet',
 ];
 
+function calcAgeFromBirthDate(dateStr) {
+  const bd = new Date(dateStr);
+  const today = new Date();
+  let age = today.getFullYear() - bd.getFullYear();
+  const m = today.getMonth() - bd.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+  return age;
+}
+
 function validateRegister(body) {
-  const { name, email, age, weight, height } = body;
+  const { name, email, birth_date, age, weight, height } = body;
   if (!name?.trim()) return 'El nombre es obligatorio.';
   if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Email invalido.';
-  if (!age || isNaN(age) || age < 5 || age > 120) return 'Edad invalida (5-120).';
+  // Accept birth_date or age
+  const effectiveAge = birth_date ? calcAgeFromBirthDate(birth_date) : age;
+  if (!effectiveAge || isNaN(effectiveAge) || effectiveAge < 5 || effectiveAge > 120) return 'Fecha de nacimiento o edad invalida.';
   if (!weight || isNaN(weight) || weight < 20 || weight > 500) return 'Peso invalido (20-500 kg).';
   if (!height || isNaN(height) || height < 50 || height > 250) return 'Altura invalida (50-250 cm).';
   if (!body.goal) return 'Selecciona un objetivo.';
@@ -24,7 +35,10 @@ async function register(req, res) {
   try {
     const error = validateRegister(req.body);
     if (error) return res.status(400).json({ ok: false, error });
-    const data = { ...req.body, email: req.body.email.trim().toLowerCase() };
+    const body = { ...req.body, email: req.body.email.trim().toLowerCase() };
+    // Derive age from birth_date if not explicitly provided
+    if (body.birth_date && !body.age) body.age = calcAgeFromBirthDate(body.birth_date);
+    const data = body;
     const user = await userService.createUser(data);
     res.status(201).json({ ok: true, user });
   } catch (err) {
