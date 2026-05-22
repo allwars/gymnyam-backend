@@ -73,7 +73,7 @@ async function updateGoal(userId, goal) {
 }
 
 async function updateProfile(userId, data) {
-  const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies'];
+  const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies','health_data'];
   const update = Object.fromEntries(Object.entries(data).filter(([k, v]) => allowed.includes(k) && v !== undefined));
   if (!Object.keys(update).length) return getUserById(userId);
   const { data: user, error } = await supabase
