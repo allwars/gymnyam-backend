@@ -1,12 +1,23 @@
 const supabase = require('../db/supabase');
 
+function calcAgeFromBirthDate(dateStr) {
+  const bd = new Date(dateStr);
+  const today = new Date();
+  let age = today.getFullYear() - bd.getFullYear();
+  const m = today.getMonth() - bd.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+  return age;
+}
+
 async function createUser(data) {
+  const age = data.birth_date ? calcAgeFromBirthDate(data.birth_date) : (data.age || null);
   const { data: user, error } = await supabase
     .from('users')
     .insert({
       name: data.name,
       email: data.email,
-      age: data.age || null,
+      birth_date: data.birth_date || null,
+      age,
       sex: data.sex || null,
       weight: data.weight || null,
       height: data.height || null,
@@ -29,6 +40,10 @@ async function getUserById(id) {
   const { data: user, error } = await supabase
     .from('users').select('*, sports(*)').eq('id', id).single();
   if (error || !user) return null;
+  // Derive age from birth_date if age column is null/stale
+  if (user.birth_date && !user.age) {
+    user.age = calcAgeFromBirthDate(user.birth_date);
+  }
   return user;
 }
 
@@ -75,6 +90,8 @@ async function updateGoal(userId, goal) {
 async function updateProfile(userId, data) {
   const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies','health_data'];
   const update = Object.fromEntries(Object.entries(data).filter(([k, v]) => allowed.includes(k) && v !== undefined));
+  // Keep age in sync when birth_date is updated
+  if (update.birth_date) update.age = calcAgeFromBirthDate(update.birth_date);
   if (!Object.keys(update).length) return getUserById(userId);
   const { data: user, error } = await supabase
     .from('users').update(update).eq('id', userId).select('*, sports(*)').single();
