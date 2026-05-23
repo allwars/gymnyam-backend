@@ -88,7 +88,7 @@ async function updateGoal(userId, goal) {
 }
 
 async function updateProfile(userId, data) {
-  const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies','health_data'];
+  const allowed = ['name','age','sex','birth_date','weight','height','goal','sleep_hours','injuries','allergies','health_data','webhook_token'];
   const update = Object.fromEntries(Object.entries(data).filter(([k, v]) => allowed.includes(k) && v !== undefined));
   // Keep age in sync when birth_date is updated
   if (update.birth_date) update.age = calcAgeFromBirthDate(update.birth_date);
@@ -121,4 +121,15 @@ async function updateDiet(userId, dietData) {
   return user;
 }
 
-module.exports = { createUser, getUserById, getUserByEmail, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet, deleteUser };
+async function getHealthImports(userId, limit = 20) {
+  const { data, error } = await supabase
+    .from('health_imports')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+module.exports = { createUser, getUserById, getUserByEmail, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet, deleteUser, getHealthImports };
