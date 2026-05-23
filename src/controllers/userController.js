@@ -176,4 +176,39 @@ async function getTDEE(req, res) {
   }
 }
 
-module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getTDEE };
+async function getWebhookToken(req, res) {
+  try {
+    const userId = Number(req.params.id);
+    const user = await userService.getUser(userId);
+    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    res.json({ ok: true, webhook_token: user.webhook_token ?? null });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+async function generateWebhookToken(req, res) {
+  try {
+    const userId = Number(req.params.id);
+    const buf = require('crypto').randomBytes(24);
+    const token = buf.toString('base64url');
+    const user = await userService.updateProfile(userId, { webhook_token: token });
+    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado' });
+    res.json({ ok: true, webhook_token: token });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+async function getHealthImports(req, res) {
+  try {
+    const userId = Number(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 20, 50);
+    const imports = await userService.getHealthImports(userId, limit);
+    res.json({ ok: true, imports });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getTDEE, getWebhookToken, generateWebhookToken, getHealthImports };
