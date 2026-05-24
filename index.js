@@ -55,6 +55,98 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 });
 
+// ── Fitbit OAuth callback ─────────────────────────────────────────────────────
+app.get('/auth/fitbit/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(error || 'no_code')}`);
+  try {
+    const creds = Buffer.from(`${process.env.FITBIT_CLIENT_ID}:${process.env.FITBIT_CLIENT_SECRET}`).toString('base64');
+    const tokenRes = await fetch('https://api.fitbit.com/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${creds}` },
+      body: new URLSearchParams({
+        code, grant_type: 'authorization_code',
+        redirect_uri: `${process.env.BACKEND_URL || 'https://gymnyam-backend-production.up.railway.app'}/auth/fitbit/callback`,
+      }).toString(),
+    });
+    const data = await tokenRes.json();
+    if (data.access_token) {
+      return res.redirect(`gymnyam://oauth?platform=fitbit&access_token=${encodeURIComponent(data.access_token)}&refresh_token=${encodeURIComponent(data.refresh_token || '')}&expires_in=${data.expires_in || 3600}`);
+    }
+    return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(JSON.stringify(data))}`);
+  } catch (e) { return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(e.message)}`); }
+});
+
+// ── Strava OAuth callback ─────────────────────────────────────────────────────
+app.get('/auth/strava/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(error || 'no_code')}`);
+  try {
+    const tokenRes = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code, grant_type: 'authorization_code',
+        client_id: process.env.STRAVA_CLIENT_ID,
+        client_secret: process.env.STRAVA_CLIENT_SECRET,
+      }).toString(),
+    });
+    const data = await tokenRes.json();
+    if (data.access_token) {
+      return res.redirect(`gymnyam://oauth?platform=strava&access_token=${encodeURIComponent(data.access_token)}&refresh_token=${encodeURIComponent(data.refresh_token || '')}&expires_in=${data.expires_in || 21600}&user_id=${data.athlete?.id || ''}`);
+    }
+    return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(JSON.stringify(data))}`);
+  } catch (e) { return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(e.message)}`); }
+});
+
+// ── Withings OAuth callback ───────────────────────────────────────────────────
+app.get('/auth/withings/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(error || 'no_code')}`);
+  try {
+    const backendUrl = process.env.BACKEND_URL || 'https://gymnyam-backend-production.up.railway.app';
+    const tokenRes = await fetch('https://wbsapi.withings.net/v2/oauth2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        action: 'requesttoken', code, grant_type: 'authorization_code',
+        client_id: process.env.WITHINGS_CLIENT_ID,
+        client_secret: process.env.WITHINGS_CLIENT_SECRET,
+        redirect_uri: `${backendUrl}/auth/withings/callback`,
+      }).toString(),
+    });
+    const data = await tokenRes.json();
+    const tok = data.body;
+    if (tok?.access_token) {
+      return res.redirect(`gymnyam://oauth?platform=withings&access_token=${encodeURIComponent(tok.access_token)}&refresh_token=${encodeURIComponent(tok.refresh_token || '')}&expires_in=${tok.expires_in || 10800}`);
+    }
+    return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(JSON.stringify(data))}`);
+  } catch (e) { return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(e.message)}`); }
+});
+
+// ── Polar OAuth callback ──────────────────────────────────────────────────────
+app.get('/auth/polar/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(error || 'no_code')}`);
+  try {
+    const backendUrl = process.env.BACKEND_URL || 'https://gymnyam-backend-production.up.railway.app';
+    const creds = Buffer.from(`${process.env.POLAR_CLIENT_ID}:${process.env.POLAR_CLIENT_SECRET}`).toString('base64');
+    const tokenRes = await fetch('https://polarremote.com/v2/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${creds}` },
+      body: new URLSearchParams({
+        code, grant_type: 'authorization_code',
+        redirect_uri: `${backendUrl}/auth/polar/callback`,
+      }).toString(),
+    });
+    const data = await tokenRes.json();
+    if (data.access_token) {
+      return res.redirect(`gymnyam://oauth?platform=polar&access_token=${encodeURIComponent(data.access_token)}&refresh_token=${encodeURIComponent(data.refresh_token || '')}&expires_in=${data.expires_in || 21600}&user_id=${data.x_user_id || ''}`);
+    }
+    return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(JSON.stringify(data))}`);
+  } catch (e) { return res.redirect(`gymnyam://oauth?error=${encodeURIComponent(e.message)}`); }
+});
+
 app.use('/api/users', userRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/meals', mealRoutes);
