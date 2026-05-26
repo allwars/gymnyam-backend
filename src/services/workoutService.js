@@ -32,19 +32,22 @@ function getDietSafetyWarning(user) {
   return null;
 }
 
-async function generateAndSave({ userId, level, checkin }) {
+async function generateAndSave({ userId, level, checkin, sport }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
 
-  // CrossFit: nivel desde parámetro (frontend), tabla sports, campo level, o defecto Intermedio
+  // Deporte activo: viene del frontend; por defecto CrossFit para compatibilidad
+  const activeSport = sport || 'CrossFit';
+
+  // Nivel: primero el param del frontend (ya es el nivel del deporte correcto),
+  // si no hay, busca en user.sports el deporte activo, luego fallback genérico
   const levelFromParam  = level || null;
-  const levelFromSports = user.sports?.find(s => s.name === 'CrossFit')?.level || null;
+  const levelFromSports = user.sports?.find(s => s.name === activeSport)?.level || null;
   const levelFromUser   = user.level || null;
   const resolvedLevel   = levelFromParam || levelFromSports || levelFromUser || 'Intermedio';
 
-  // Aviso en logs cuando usamos el fallback — ayuda a detectar el bug de Supabase sports.level=null
   if (!levelFromParam && !levelFromSports && !levelFromUser) {
-    console.warn(`[workoutService] userId=${userId} — nivel no encontrado en param/sports/user → fallback a 'Intermedio'. Revisar columna level en tabla sports.`);
+    console.warn(`[workoutService] userId=${userId} sport=${activeSport} — nivel no encontrado → fallback 'Intermedio'`);
   }
 
   const history = await workoutRepo.getWorkoutsByUser(userId, 5);
@@ -55,6 +58,9 @@ async function generateAndSave({ userId, level, checkin }) {
     mealContext = allMeals.filter(m => m.date && m.date.toString().split('T')[0] === today);
   }
 
+  // Perfil del deporte activo (posición, objetivo, sesiones, etc.)
+  const sportProfile = user.sports?.find(s => s.name === activeSport)?.profile || null;
+
   let plan;
   try {
     plan = await generateWorkout({
@@ -64,51 +70,56 @@ async function generateAndSave({ userId, level, checkin }) {
       synergy: !!user.synergy_enabled,
       mealContext,
       checkin: checkin || null,
+      sport: activeSport,
+      sportProfile,
     });
   } catch (e) {
-    throw new Error(`Error generando WOD con IA: ${e.message}`);
+    throw new Error(`Error generando entrenamiento con IA: ${e.message}`);
   }
 
-  // Garantizar time_cap en WODs que lo requieren (defensa ante respuestas incompletas de la IA)
-  const TIME_CAP_REQUIRED = ['For Time', 'Chipper', 'Hero WOD'];
-  if (plan.wod && TIME_CAP_REQUIRED.includes(plan.wod.type) && !plan.wod.time_cap) {
-    plan.wod.time_cap = '20 min';
-    console.warn(`[workoutService] userId=${userId} — time_cap añadido por defecto en WOD tipo '${plan.wod.type}'`);
+  // Garantizar time_cap en WODs CrossFit que lo requieren
+  if (activeSport === 'CrossFit') {
+    const TIME_CAP_REQUIRED = ['For Time', 'Chipper', 'Hero WOD'];
+    if (plan.wod && TIME_CAP_REQUIRED.includes(plan.wod.type) && !plan.wod.time_cap) {
+      plan.wod.time_cap = '20 min';
+      console.warn(`[workoutService] userId=${userId} — time_cap añadido por defecto en WOD tipo '${plan.wod.type}'`);
+    }
   }
 
-  // Guardar el WOD completo: exercises contiene los movimientos del WOD
-  const wodMovements = plan.wod?.movements || plan.exercises || [];
+  // Guardar: para CrossFit usamos wod.movements, para otros deportes usamos exercises
+  const exercisesToSave = plan.wod?.movements || plan.exercises || [];
   const saved = await workoutRepo.saveWorkout({
     user_id: userId,
-    sport: 'CrossFit',
+    sport: activeSport,
     warmup: plan.warmup,
-    exercises: wodMovements,
+    exercises: exercisesToSave,
     stretching: plan.stretching,
     summary: plan.summary,
     difficulty: resolvedLevel,
     notes: null,
-    // Campos extra del WOD (guardamos el plan completo en notes_json si el repo lo soporta)
-    wod_type: plan.wod_type,
-    wod_format: plan.wod_format,
-    wod: plan.wod,
-    strength_block: plan.strength_block,
-    ai_coaching_tip: plan.ai_coaching_tip,
+    wod_type: plan.wod_type || null,
+    wod_format: plan.wod_format || null,
+    wod: plan.wod || null,
+    strength_block: plan.strength_block || null,
+    ai_coaching_tip: plan.ai_coaching_tip || null,
   });
 
   const dietWarning = getDietSafetyWarning(user);
 
   return {
     ...saved,
+    sport: activeSport,
     difficulty: resolvedLevel,
-    wod_type: plan.wod_type,
-    wod_format: plan.wod_format,
-    wod: plan.wod,
-    strength_block: plan.strength_block,
-    ai_coaching_tip: plan.ai_coaching_tip,
+    wod_type: plan.wod_type || null,
+    wod_format: plan.wod_format || null,
+    wod: plan.wod || null,
+    strength_block: plan.strength_block || null,
+    ai_coaching_tip: plan.ai_coaching_tip || null,
     warmup: plan.warmup,
+    exercises: plan.exercises || null,
     stretching: plan.stretching,
     summary: plan.summary,
-    // null si la dieta del usuario es compatible; string de advertencia si no lo es
+    estimated_duration: plan.estimated_duration || null,
     diet_safety_warning: dietWarning,
   };
 }
