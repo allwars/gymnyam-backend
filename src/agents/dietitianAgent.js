@@ -95,10 +95,12 @@ async function suggestMeal({ user, mealTime, pantry, mealHistory, synergy, worko
   return chat(system, 'Sugiere qué comer ahora.\n' + context, 1000);
 }
 
-async function analyzeExternalMeal({ user, description, synergy, workoutContext }) {
+async function analyzeExternalMeal({ user, description, synergy, workoutContext, dailyContext }) {
   const dietContext = buildDietContext(user);
+  const dailyCtx = buildDailyCtx(dailyContext);
   const system = 'Eres un dietista experto. Analiza comidas y da su valor nutricional estimado.\n' +
     (dietContext ? 'DIETA DEL USUARIO:\n' + dietContext : '') + '\n' +
+    'En el campo "advice", comenta brevemente cómo encaja esta comida en el objetivo nutricional del día si se dispone de ese contexto.\n' +
     'Responde UNICAMENTE con JSON valido:\n{"foods":[{"name":"string","quantity":"string","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"advice":"string","score":7,"diet_compliant":true,"diet_violations":[]}';
   const context = [
     'Perfil: objetivo ' + user.goal + ', peso ' + user.weight + 'kg',
@@ -107,6 +109,7 @@ async function analyzeExternalMeal({ user, description, synergy, workoutContext 
     synergy && workoutContext && workoutContext.length
       ? buildSynergyCtx(workoutContext[0])
       : '',
+    dailyCtx || '',
   ].filter(Boolean).join('\n');
   return chat(system, context, 800);
 }
@@ -118,6 +121,46 @@ async function analyzePantry({ user, pantry, mealHistory }) {
     'Responde UNICAMENTE con JSON valido:\n{"score":7,"summary":"string","strengths":["string"],"improvements":["string"],"diet_compatible_items":["string"],"diet_incompatible_items":["string"],"motivation":"string"}';
   const context = 'Objetivo: ' + user.goal + '\nAlimentos en despensa: ' + pantry.map(function(p){ return p.name; }).join(', ') + '\nComidas registradas: ' + (mealHistory ? mealHistory.length : 0);
   return chat(system, 'Analiza esta despensa.\n' + context, 600);
+}
+
+// ── Contexto de nutrición diaria para orientar las sugerencias de la IA ──────
+function buildDailyCtx(ctx) {
+  if (!ctx || !ctx.kcal_target) return '';
+  var consumed = ctx.kcal_consumed || 0;
+  var target   = ctx.kcal_target  || 0;
+  var score    = ctx.score        || 0;
+  var protein  = ctx.protein_g    || 0;
+  var carbs    = ctx.carbs_g      || 0;
+  var fat      = ctx.fat_g        || 0;
+  var pct      = target > 0 ? Math.round((consumed / target) * 100) : 0;
+  var remaining = Math.max(0, Math.round(target - consumed));
+
+  var directive;
+  if (pct >= 120) {
+    directive = 'El usuario YA SUPERÓ el objetivo calórico del día. Sugiere platos muy ligeros (<300 kcal). Evita carbohidratos innecesarios y grasas añadidas.';
+  } else if (pct >= 100) {
+    directive = 'El usuario está justo en su objetivo calórico. Si necesita cenar, sugiere opciones ligeras y equilibradas (<400 kcal).';
+  } else if (pct >= 70) {
+    directive = 'Quedan ' + remaining + ' kcal para completar el objetivo. Sugiere platos moderados (300-500 kcal), ricos en proteína y bien equilibrados.';
+  } else if (pct >= 40) {
+    directive = 'Quedan ' + remaining + ' kcal. Sugiere platos medianos (400-700 kcal), nutritivos y balanceados.';
+  } else if (consumed > 0) {
+    directive = 'Quedan ' + remaining + ' kcal. Sugiere platos completos y energéticos (500-800 kcal) para ayudar a alcanzar el objetivo del día.';
+  } else {
+    directive = 'Aún no hay comidas registradas hoy. Sugiere platos completos y nutritivos acordes al objetivo calórico de ' + target + ' kcal.';
+  }
+
+  if (protein < 50 && consumed > 0) {
+    directive += ' La ingesta de proteína del día es baja (' + Math.round(protein) + 'g) — prioriza ingredientes proteicos.';
+  }
+
+  return [
+    '══ ESTADO NUTRICIONAL DEL DÍA (AJUSTA TUS SUGERENCIAS SEGÚN ESTO) ══',
+    'Calorías consumidas hoy: ' + Math.round(consumed) + ' kcal de ' + Math.round(target) + ' kcal objetivo (' + pct + '%)',
+    'Macros del día — Proteína: ' + Math.round(protein) + 'g | Carbos: ' + Math.round(carbs) + 'g | Grasas: ' + Math.round(fat) + 'g',
+    'Nota actual del día: ' + score + '/10',
+    'DIRECTIVA CALÓRICA: ' + directive,
+  ].join('\n');
 }
 
 // ── Detecta la cocina dominante según los ingredientes de la despensa ──
@@ -185,11 +228,12 @@ function validateDishes(dishes, pantry) {
   return validated;
 }
 
-async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, workoutContext }) {
+async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, workoutContext, dailyContext }) {
   const dietContext = buildDietContext(user);
   const diet = DIET_RULES[user.diet_type];
   const cuisine = detectCuisine(pantry);
   const cuisineStyle = CUISINE_STYLES[cuisine];
+  const dailyCtx = buildDailyCtx(dailyContext);
 
   // Lista numerada de ingredientes — formato explícito para el modelo
   var pantryNumbered = null;
@@ -223,6 +267,7 @@ async function suggestDishes({ user, mealTime, pantry, mealHistory, synergy, wor
     dietContext ? '══ DIETA ══\n' + dietContext : '',
     'Comidas al día: ' + (diet ? diet.meals_per_day : 3) + '.',
     '',
+    dailyCtx ? dailyCtx + '\n' : '',
     'Responde ÚNICAMENTE con este JSON válido (sin texto adicional):',
     '{"dishes":[{"name":"NOMBRE DEL PLATO (ej: Tortilla española)","emoji":"🍳","description":"Descripción breve del plato","ingredients":[{"name":"NOMBRE DEL INGREDIENTE (ej: Huevo, Pan integral, Crema de cacahuete — NUNCA el nombre del plato)","quantity":"2 uds","calories":100,"protein":10,"carbs":20,"fat":5,"fiber":2,"sugar":3,"has_preservatives":false}],"recipe_steps":["Paso 1..."],"prep_time":"15 min","nutritional_info":{"total_calories":400,"total_protein":30,"total_carbs":50,"total_fat":10,"total_fiber":8,"total_sugar":12},"score":8,"uses_pantry":true,"diet_compliant":true}]}',
     'IMPORTANTE: ingredients[].name = nombre del INGREDIENTE, NUNCA el nombre del plato. Ejemplo incorrecto: "Sandwich de crema de cacahuete". Ejemplo correcto: "Pan de molde", "Crema de cacahuete", "Sal gorda".',

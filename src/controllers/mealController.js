@@ -15,9 +15,9 @@ async function suggest(req, res) {
 async function analyzeExternal(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const { description, mealTime } = req.body;
+    const { description, mealTime, dailyContext } = req.body;
     if (!description) return res.status(400).json({ ok: false, error: 'Descripcion requerida' });
-    const meal = await mealService.analyzeExternal({ userId, description, mealTime });
+    const meal = await mealService.analyzeExternal({ userId, description, mealTime, dailyContext });
     res.json({ ok: true, meal });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -72,10 +72,11 @@ async function updateMeal(req, res) {
 async function getDishSuggestions(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const { mealTime, selectedIngredients } = req.body;
+    const { mealTime, selectedIngredients, dailyContext } = req.body;
     // selectedIngredients: array de nombres de ingredientes seleccionados por el usuario
     // Si no se envía, se usa toda la despensa
-    const result = await mealService.getDishSuggestions({ userId, mealTime, selectedIngredients });
+    // dailyContext: estado nutricional del día (kcal consumidas, objetivo, macros, nota)
+    const result = await mealService.getDishSuggestions({ userId, mealTime, selectedIngredients, dailyContext });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

@@ -85,7 +85,7 @@ async function suggest({ userId, mealTime }) {
   return mealRepo.saveMeal({ user_id: userId, meal_time: mt, type: 'suggestion', foods: suggestion.foods, nutritional_info: suggestion.nutritional_info, advice: suggestion.advice, score: suggestion.score });
 }
 
-async function analyzeExternal({ userId, description, mealTime }) {
+async function analyzeExternal({ userId, description, mealTime, dailyContext }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
   let workoutContext = null;
@@ -96,7 +96,7 @@ async function analyzeExternal({ userId, description, mealTime }) {
     workoutContext = buildWorkoutContext(todayWorkouts);
   }
   const mt = mealTime || getCurrentMealTime();
-  const analysis = await analyzeExternalMeal({ user, description, synergy: !!user.synergy_enabled, workoutContext });
+  const analysis = await analyzeExternalMeal({ user, description, synergy: !!user.synergy_enabled, workoutContext, dailyContext });
   return mealRepo.saveMeal({ user_id: userId, meal_time: mt, type: 'external', foods: analysis.foods, nutritional_info: analysis.nutritional_info, advice: analysis.advice, score: analysis.score });
 }
 
@@ -111,7 +111,7 @@ async function getPantryAnalysis(userId) {
 
 async function getHistory(userId, limit) { return mealRepo.getMealsByUser(userId, limit); }
 
-async function getDishSuggestions({ userId, mealTime, selectedIngredients }) {
+async function getDishSuggestions({ userId, mealTime, selectedIngredients, dailyContext }) {
   const user = await userRepo.getUserById(userId);
   if (!user) throw new Error('Usuario no encontrado');
   const allPantry = await pantryRepo.getPantryByUser(userId);
@@ -127,7 +127,7 @@ async function getDishSuggestions({ userId, mealTime, selectedIngredients }) {
     workoutContext = buildWorkoutContext(all.filter(w => String(w.date).split('T')[0] === today));
   }
   const mt = mealTime || getCurrentMealTime();
-  const result = await suggestDishes({ user, mealTime: mt, pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext });
+  const result = await suggestDishes({ user, mealTime: mt, pantry, mealHistory, synergy: !!user.synergy_enabled, workoutContext, dailyContext });
   const dishes = deduplicateDishes(result.dishes || []);
   return { dishes, mealTime: mt };
 }
