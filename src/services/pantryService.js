@@ -2,6 +2,56 @@ const pantryRepo = require('../repositories/pantryRepository');
 const { chat }   = require('../agents/client');
 const supabase   = require('../db/supabase');
 
+/**
+ * Calcula la puntuación nutricional (0–100) a partir de los macros.
+ * Fórmula consistente con offToNutritionalInfo en el cliente.
+ * Se usa para los alimentos estimados por IA (sin datos NOVA/Nutriscore).
+ */
+function computeNutritionScore(result) {
+  const protein         = result.protein_per_100g  || 0;
+  const fiber           = result.fiber_per_100g    || 0;
+  const sugar           = result.sugar_per_100g    || 0;
+  const fat             = result.fat_per_100g      || 0;
+  const calories        = result.calories_per_100g || 0;
+  const hasPreservatives = result.has_preservatives || false;
+
+  let base = 65; // base sin datos NOVA
+
+  // Proteína
+  if (protein > 25)      base += 10;
+  else if (protein > 15) base += 6;
+  else if (protein > 8)  base += 2;
+
+  // Fibra
+  if (fiber > 6)      base += 8;
+  else if (fiber > 3) base += 4;
+
+  // Azúcar (penalización progresiva)
+  if (sugar > 25)      base -= 15;
+  else if (sugar > 15) base -= 8;
+  else if (sugar > 8)  base -= 4;
+
+  // Grasa muy alta (solo penaliza si excede mucho)
+  if (fat > 35)      base -= 8;
+  else if (fat > 25) base -= 4;
+
+  // Calorías
+  if (calories > 550)      base -= 10;
+  else if (calories > 400) base -= 5;
+  else if (calories < 60)  base += 5;
+
+  // Conservantes / aditivos
+  if (hasPreservatives) base -= 8;
+
+  const score = Math.max(15, Math.min(100, Math.round(base)));
+  const score_label = score >= 80 ? 'Excelente'
+    : score >= 65 ? 'Bueno'
+    : score >= 45 ? 'Aceptable'
+    : 'Limitado';
+
+  return { score, score_label };
+}
+
 const BUCKET = 'images';
 
 async function getAll(userId) {
@@ -89,18 +139,28 @@ async function lookupNutrition(userId, itemId) {
 
   const result = await chat(system, `Valores nutricionales por 100g de: ${item.name}`, 800);
 
+  // Calcular score con fórmula propia (no confiar en el score subjetivo de la IA)
+  const computed = computeNutritionScore({
+    protein_per_100g:  result.protein_per_100g,
+    fiber_per_100g:    result.fiber_per_100g,
+    sugar_per_100g:    result.sugar_per_100g,
+    fat_per_100g:      result.fat_per_100g,
+    calories_per_100g: result.calories_per_100g,
+    has_preservatives: result.has_preservatives,
+  });
+
   const nutritional_info = {
-    calories_per_100g: result.calories_per_100g ?? null,
-    protein_per_100g: result.protein_per_100g ?? null,
-    carbs_per_100g: result.carbs_per_100g ?? null,
-    fat_per_100g: result.fat_per_100g ?? null,
-    fiber_per_100g: result.fiber_per_100g ?? null,
-    sugar_per_100g: result.sugar_per_100g ?? null,
-    has_preservatives: result.has_preservatives ?? null,
-    score: result.score ?? null,
-    score_label: result.score_label ?? null,
-    positive_points: result.positive_points || [],
-    negative_points: result.negative_points || [],
+    calories_per_100g:  result.calories_per_100g  ?? null,
+    protein_per_100g:   result.protein_per_100g   ?? null,
+    carbs_per_100g:     result.carbs_per_100g      ?? null,
+    fat_per_100g:       result.fat_per_100g        ?? null,
+    fiber_per_100g:     result.fiber_per_100g      ?? null,
+    sugar_per_100g:     result.sugar_per_100g      ?? null,
+    has_preservatives:  result.has_preservatives   ?? null,
+    score:              computed.score,
+    score_label:        computed.score_label,
+    positive_points:    result.positive_points     || [],
+    negative_points:    result.negative_points     || [],
   };
 
   return pantryRepo.updateItem(itemId, userId, { nutritional_info });
