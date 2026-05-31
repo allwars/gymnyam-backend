@@ -222,19 +222,25 @@ async function loginWithPassword(req, res) {
   try {
     const { email, password } = req.body;
     if (!email?.trim()) return res.status(400).json({ ok: false, error: 'Email requerido.' });
+    if (!password) return res.status(400).json({ ok: false, error: 'Contraseña requerida.' });
+
     const user = await userService.getUserByEmail(email.trim().toLowerCase());
     if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
 
-    if (user.password_hash) {
-      // Password is set — require it
-      if (!password) return res.status(400).json({ ok: false, error: 'Contraseña requerida.' });
-      const [salt, storedHash] = user.password_hash.split(':');
-      const inputHash = crypto.scryptSync(password, salt, 64).toString('hex');
-      if (inputHash !== storedHash) {
-        return res.status(401).json({ ok: false, error: 'Contraseña incorrecta.' });
-      }
+    if (!user.password_hash) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Esta cuenta no tiene contraseña configurada. Accede con Google Sign-In o establece una contraseña desde tu perfil.',
+        code: 'NO_PASSWORD',
+      });
     }
-    // No password set → allow login (backward compat for existing accounts)
+
+    const [salt, storedHash] = user.password_hash.split(':');
+    const inputHash = crypto.scryptSync(password, salt, 64).toString('hex');
+    if (inputHash !== storedHash) {
+      return res.status(401).json({ ok: false, error: 'Contraseña incorrecta.' });
+    }
+
     res.json({ ok: true, user });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
