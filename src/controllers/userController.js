@@ -32,14 +32,20 @@ function validateRegister(body) {
 }
 
 async function register(req, res) {
+  const crypto = require('crypto');
   try {
     const error = validateRegister(req.body);
     if (error) return res.status(400).json({ ok: false, error });
     const body = { ...req.body, email: req.body.email.trim().toLowerCase() };
-    // Derive age from birth_date if not explicitly provided
     if (body.birth_date && !body.age) body.age = calcAgeFromBirthDate(body.birth_date);
-    const data = body;
-    const user = await userService.createUser(data);
+    // Hash password if provided
+    if (body.password) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(body.password, salt, 64).toString('hex');
+      body.password_hash = `${salt}:${hash}`;
+      delete body.password;
+    }
+    const user = await userService.createUser(body);
     res.status(201).json({ ok: true, user });
   } catch (err) {
     const isDuplicate = err.message?.includes('UNIQUE') || err.message?.includes('unique');
@@ -211,4 +217,77 @@ async function getHealthImports(req, res) {
   }
 }
 
-module.exports = { register, login, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getTDEE, getWebhookToken, generateWebhookToken, getHealthImports };
+async function loginWithPassword(req, res) {
+  const crypto = require('crypto');
+  try {
+    const { email, password } = req.body;
+    if (!email?.trim()) return res.status(400).json({ ok: false, error: 'Email requerido.' });
+    const user = await userService.getUserByEmail(email.trim().toLowerCase());
+    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+
+    if (user.password_hash) {
+      // Password is set — require it
+      if (!password) return res.status(400).json({ ok: false, error: 'Contraseña requerida.' });
+      const [salt, storedHash] = user.password_hash.split(':');
+      const inputHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      if (inputHash !== storedHash) {
+        return res.status(401).json({ ok: false, error: 'Contraseña incorrecta.' });
+      }
+    }
+    // No password set → allow login (backward compat for existing accounts)
+    res.json({ ok: true, user });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+async function socialAuth(req, res) {
+  try {
+    const { email, name, provider, auth_id } = req.body;
+    if (!email?.trim()) return res.status(400).json({ ok: false, error: 'Email requerido.' });
+
+    // For Apple returning users: look up by auth_id first (email not always present)
+    if (auth_id) {
+      const byAuthId = await userService.getUserByAuthId(auth_id);
+      if (byAuthId) return res.json({ ok: true, user: byAuthId });
+    }
+
+    // Look up by email
+    let user = await userService.getUserByEmail(email.trim().toLowerCase());
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.', code: 'NOT_FOUND' });
+    }
+
+    // Update auth info if this is the first social login for this account
+    if (!user.auth_id && auth_id) {
+      user = await userService.updateAuthInfo(user.id, {
+        auth_provider: provider || 'google',
+        auth_id: auth_id || null,
+      });
+    }
+
+    res.json({ ok: true, user });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+async function setPassword(req, res) {
+  const crypto = require('crypto');
+  try {
+    const { email, password } = req.body;
+    if (!email?.trim() || !password) {
+      return res.status(400).json({ ok: false, error: 'Email y contraseña requeridos.' });
+    }
+    const user = await userService.getUserByEmail(email.trim().toLowerCase());
+    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    await userService.updateAuthInfo(user.id, { password_hash: `${salt}:${hash}` });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+module.exports = { register, login, loginWithPassword, socialAuth, setPassword, getProfile, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getTDEE, getWebhookToken, generateWebhookToken, getHealthImports };

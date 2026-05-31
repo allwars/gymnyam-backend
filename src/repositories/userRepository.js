@@ -30,6 +30,9 @@ async function createUser(data) {
       diet_fasting_start: data.diet_fasting_start || null,
       diet_phase: data.diet_phase || null,
       diet_blood_type: data.diet_blood_type || null,
+      password_hash: data.password_hash || null,
+      auth_provider: data.auth_provider || 'email',
+      auth_id: data.auth_id || null,
     })
     .select().single();
   if (error) throw new Error(error.message);
@@ -132,4 +135,21 @@ async function getHealthImports(userId, limit = 20) {
   return data ?? [];
 }
 
-module.exports = { createUser, getUserById, getUserByEmail, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet, deleteUser, getHealthImports };
+async function getUserByAuthId(authId) {
+  const { data, error } = await supabase
+    .from('users').select('*, sports(*)').eq('auth_id', authId).single();
+  if (error || !data) return null;
+  return data;
+}
+
+async function updateAuthInfo(userId, fields) {
+  const allowed = ['password_hash', 'auth_provider', 'auth_id'];
+  const update = Object.fromEntries(Object.entries(fields).filter(([k]) => allowed.includes(k)));
+  if (!Object.keys(update).length) return getUserById(userId);
+  const { data, error } = await supabase
+    .from('users').update(update).eq('id', userId).select('*, sports(*)').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+module.exports = { createUser, getUserById, getUserByEmail, getUserByAuthId, updateAuthInfo, updateSynergy, addSport, updateSports, updateGoal, updateProfile, updateDiet, deleteUser, getHealthImports };

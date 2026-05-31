@@ -33,5 +33,7 @@ async function updateDiet(userId, dietData) {
 
 async function deleteAccount(userId) { return userRepo.deleteUser(userId); }
 async function getHealthImports(userId, limit) { return userRepo.getHealthImports(userId, limit); }
+async function getUserByAuthId(authId) { return userRepo.getUserByAuthId(authId); }
+async function updateAuthInfo(userId, fields) { return userRepo.updateAuthInfo(userId, fields); }
 
-module.exports = { createUser, getUser, getUserByEmail, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getHealthImports };
+module.exports = { createUser, getUser, getUserByEmail, getUserByAuthId, updateAuthInfo, toggleSynergy, updateSports, updateGoal, updateProfile, updateDiet, deleteAccount, getHealthImports };

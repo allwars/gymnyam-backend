@@ -4,6 +4,9 @@ const ctrl = require('../controllers/userController');
 
 router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
+router.post('/login-password', ctrl.loginWithPassword);
+router.post('/social-auth', ctrl.socialAuth);
+router.post('/set-password', ctrl.setPassword);
 router.get('/:id', ctrl.getProfile);
 router.patch('/:id/synergy', ctrl.toggleSynergy);
 router.patch('/:id/sports', ctrl.updateSports);
