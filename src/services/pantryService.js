@@ -59,21 +59,25 @@ async function getAll(userId) {
 }
 
 async function addItem(userId, data) {
-  // Detectar duplicado antes de insertar
-  const existing = await pantryRepo.getPantryByUser(userId);
-  const nameLower = (data.name || '').toLowerCase().trim();
-  const barcode   = data.nutritional_info?.off_barcode || null;
+  // force: true → el usuario confirmó que quiere añadir aunque sea duplicado
+  if (!data.force) {
+    const existing = await pantryRepo.getPantryByUser(userId);
+    const nameLower = (data.name || '').toLowerCase().trim();
+    const barcode   = data.nutritional_info?.off_barcode || null;
 
-  const duplicate = existing.find(item => {
-    if (barcode && item.nutritional_info?.off_barcode === barcode) return true;
-    return (item.name || '').toLowerCase().trim() === nameLower;
-  });
+    const duplicate = existing.find(item => {
+      if (barcode && item.nutritional_info?.off_barcode === barcode) return true;
+      return (item.name || '').toLowerCase().trim() === nameLower;
+    });
 
-  if (duplicate) {
-    return { duplicate: true, existing_item: duplicate };
+    if (duplicate) {
+      return { duplicate: true, existing_item: duplicate };
+    }
   }
 
-  return pantryRepo.addItem({ user_id: userId, ...data });
+  // Quitar el flag antes de insertar en BD
+  const { force, ...insertData } = data;
+  return pantryRepo.addItem({ user_id: userId, ...insertData });
 }
 
 async function updateItem(userId, itemId, data) {
