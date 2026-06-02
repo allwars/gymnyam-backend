@@ -117,69 +117,125 @@ function buildSessionRules(sport, profile = {}, checkin = {}) {
 function buildMealRules(user, mealContext, synergy) {
   if (!synergy || !mealContext || !mealContext.length) return '';
 
-  // Sumar macros de todas las comidas del día
-  let kcal = 0, carbs = 0, protein = 0, fat = 0;
+  // Sumar macros reales de todas las comidas del día
+  let kcal = 0, carbs = 0, protein = 0, fat = 0, fiber = 0, sugar = 0;
   for (const meal of mealContext) {
     const ni = meal.nutritional_info || {};
     kcal    += Number(ni.total_calories) || 0;
     carbs   += Number(ni.total_carbs)    || 0;
     protein += Number(ni.total_protein)  || 0;
     fat     += Number(ni.total_fat)      || 0;
+    fiber   += Number(ni.total_fiber)    || 0;
+    sugar   += Number(ni.total_sugar)    || 0;
   }
   if (kcal === 0 && carbs === 0 && protein === 0) return '';
 
-  // Targets del usuario (si los tiene configurados)
-  const tKcal    = Number(user.calories_target) || 0;
-  const tProtein = Number(user.protein_target)  || 0;
-  const tCarbs   = Number(user.carbs_target)    || 0;
+  const tKcal    = Number(user.calories_target) || 2000;
+  const tProtein = Number(user.protein_target)  || 120;
+  const tCarbs   = Number(user.carbs_target)    || 200;
   const goal     = (user.goal || '').toLowerCase();
+  const weight   = Number(user.weight) || 75;
 
-  const rules = [`\n\n🍽 CONTEXTO NUTRICIONAL DE HOY (sinergia activa — adaptar entreno en consecuencia):`];
-  rules.push(`  Consumido hasta ahora: ${Math.round(kcal)} kcal | ${Math.round(carbs)}g HC | ${Math.round(protein)}g prot | ${Math.round(fat)}g grasa`);
-  if (tKcal)    rules.push(`  Objetivo calórico diario: ${tKcal} kcal`);
-  if (tProtein) rules.push(`  Objetivo proteína: ${tProtein}g`);
+  const kcalPct  = kcal  / tKcal;
+  const carbPct  = tCarbs > 0 ? carbs / tCarbs : carbs / 200;
+  const protPct  = tProtein > 0 ? protein / tProtein : protein / 120;
+  const protPerKg = protein / weight;  // g prot/kg peso
+
+  // Detectar perfil de objetivo
+  const wantsLoseWeight = goal.includes('perder') || goal.includes('quema') || goal.includes('déficit') || goal.includes('definir') || goal.includes('definición');
+  const wantsMuscle     = goal.includes('músculo') || goal.includes('musculo') || goal.includes('volumen') || goal.includes('hipertrofia');
+  const wantsPerformance = goal.includes('rendimiento') || goal.includes('competición') || goal.includes('competicion') || goal.includes('velocidad') || goal.includes('resistencia');
+  const wantsMaintain   = goal.includes('mantener') || goal.includes('mantenimiento') || goal.includes('salud');
+
+  const lines = [
+    `\n\n🍽 NUTRICIÓN DE HOY — SINERGIA ACTIVA (adapta el entreno a estos datos reales):`,
+    `  Consumido: ${Math.round(kcal)} kcal (${Math.round(kcalPct*100)}% objetivo) | ${Math.round(carbs)}g HC | ${Math.round(protein)}g prot (${protPerKg.toFixed(1)}g/kg) | ${Math.round(fat)}g grasa`,
+    `  Objetivo diario: ${tKcal} kcal | ${tCarbs}g HC | ${tProtein}g prot`,
+    `  Meta del usuario: ${user.goal || 'salud general'}`,
+  ];
 
   const adaptRules = [];
+  // nutrition_alert se generará en el JSON de respuesta — aquí solo las reglas de entreno
 
-  // ── GLUCÓGENO / CARBOHIDRATOS ─────────────────────────────────────────────
-  const carbPct = tCarbs > 0 ? carbs / tCarbs : null;
-  if (carbs < 50) {
-    adaptRules.push('⚠ GLUCÓGENO BAJO (<50g HC consumidos): EVITA HIIT de máxima intensidad y WODs metabólicos puros. Prioriza trabajo de fuerza o cardio aeróbico zona 2. Riesgo de hipoglucemia en esfuerzos anaeróbicos prolongados.');
-  } else if (carbs >= 100 || (carbPct !== null && carbPct >= 0.6)) {
-    adaptRules.push('✅ BUENA DISPONIBILIDAD DE GLUCÓGENO: ideal para sesiones de alta intensidad, HIIT o WODs metabólicos. Puedes generar el entreno a intensidad normal o superior.');
-  } else {
-    adaptRules.push('🟡 HC MODERADOS: intensidad media. Evita series muy largas de cardio máximo; prioriza fuerza o circuitos moderados.');
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 1: AYUNO / MUY POCA COMIDA (< 15% calorías)
+  // ════════════════════════════════════════════════════════════════════════
+  if (kcalPct < 0.15) {
+    adaptRules.push('🚨 AYUNO CASI TOTAL (<15% calorías consumidas): PELIGRO. Solo entrenamiento de movilidad, stretching o caminata suave. PROHIBIDO cualquier ejercicio de alta o media intensidad. Riesgo real de lipotimia. nutrition_alert debe ser level:"danger".');
   }
-
-  // ── CALORÍAS TOTALES ──────────────────────────────────────────────────────
-  const kcalPct = tKcal > 0 ? kcal / tKcal : null;
-  if (kcalPct !== null && kcalPct < 0.30) {
-    adaptRules.push('⚠ DÉFICIT CALÓRICO SEVERO (menos del 30% del objetivo consumido): REDUCE intensidad un 30%. Evita entrenos de alta demanda energética. Riesgo de mareo o pérdida de rendimiento.');
-  } else if (kcalPct !== null && kcalPct > 1.1) {
-    adaptRules.push('📈 SUPERÁVIT CALÓRICO (más del 110% del objetivo): ideal para sesiones de volumen alto y trabajo de fuerza/hipertrofia. Aprovecha para añadir sets.');
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 2: QUEMA DE GRASA + POCOS HC (glucógeno bajo)
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsLoseWeight && carbs < 60) {
+    adaptRules.push('⚠ QUEMA DE GRASA + HC BAJOS (<60g): El cuerpo NECESITA algo de glucógeno para trabajar. Genera CARDIO ZONA 2 (50-65% FC máx) o fuerza de intensidad baja-media. El HIIT sin glucógeno puede catabolizar músculo. Duración máx 35 min. nutrition_alert level:"warning".');
   }
-
-  // ── PROTEÍNA ──────────────────────────────────────────────────────────────
-  const protPct = tProtein > 0 ? protein / tProtein : null;
-  if (goal.includes('músculo') || goal.includes('volumen') || goal.includes('fuerza')) {
-    if (protPct !== null && protPct >= 0.6) {
-      adaptRules.push('💪 BUENA INGESTA PROTEICA + OBJETIVO FUERZA/MÚSCULO: prioriza trabajo de fuerza e hipertrofia hoy. Las proteínas disponibles apoyarán la síntesis muscular post-entreno.');
-    } else if (protPct !== null && protPct < 0.4) {
-      adaptRules.push('⚠ PROTEÍNA BAJA + OBJETIVO FUERZA: evita volumen excesivo de destrucción muscular. Sesión técnica o de fuerza moderada. Recomienda en ai_coaching_tip que coma proteína antes/después del entreno.');
-    }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 3: QUEMA DE GRASA + MUCHA GRASA INGERIDA
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsLoseWeight && fat > 50 && carbPct < 0.4) {
+    adaptRules.push('⚠ OBJETIVO DEFINICIÓN + ALTA INGESTA DE GRASA Y BAJOS HC: Hoy el perfil nutricional no es óptimo para quemar grasa eficientemente. Genera sesión de cardio aeróbico zona 2-3 (40-50 min a ritmo moderado). Evita HIIT y fuerza máxima — el cuerpo priorizará ácidos grasos pero el rendimiento será limitado. nutrition_alert level:"warning".');
   }
-
-  // ── GRASA ALTA ────────────────────────────────────────────────────────────
-  if (fat > 60 && carbs < 80) {
-    adaptRules.push('🫒 ALTA INGESTA DE GRASA + HC BAJOS: perfil cetogénico / ayuno. Evita HIIT y metabolismo anaeróbico. Fuerza lenta o cardio aeróbico bajo son los más adecuados.');
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 4: QUEMA DE GRASA + SUPERÁVIT (comió demasiado)
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsLoseWeight && kcalPct > 1.15) {
+    adaptRules.push('💡 OBJETIVO PÉRDIDA DE PESO + SUPERÁVIT CALÓRICO (>115%): Hoy has comido por encima del objetivo. Aumenta duración/volumen del entreno un 20%. Añade 10-15 min de cardio al final. Prioriza ejercicios compuestos de alto gasto energético. nutrition_alert level:"info".');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 5: GANAR MÚSCULO + PROTEÍNA INSUFICIENTE
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsMuscle && protPct < 0.5) {
+    adaptRules.push('⚠ OBJETIVO MÚSCULO + PROTEÍNA BAJA (<50% target o <1.2g/kg): Riesgo de catabolismo muscular si haces volumen alto. Sesión técnica y de fuerza moderada (4 series × 6-8 reps). Sin metabólicos ni circuitos de alta destrucción. Recuérdalo en coaching_tip. nutrition_alert level:"warning".');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 6: GANAR MÚSCULO + BUENA NUTRICIÓN
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsMuscle && protPct >= 0.7 && kcalPct >= 0.8) {
+    adaptRules.push('✅ OBJETIVO MÚSCULO + NUTRICIÓN ÓPTIMA: Proteína y calorías en rango. Genera sesión de fuerza/hipertrofia con volumen alto (4-5 series por grupo muscular). Puedes añadir superseries o drop sets. Aprovecha el superávit proteico.');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 7: RENDIMIENTO + HC BAJOS (peligroso para competición)
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsPerformance && carbs < 80) {
+    adaptRules.push('🚨 OBJETIVO RENDIMIENTO + GLUCÓGENO BAJO (<80g HC): En atletas de rendimiento esto es un error nutricional serio. Genera sesión técnica de baja intensidad. PROHIBIDO trabajo de velocidad, potencia o intervalos máximos. Si hay competición próxima, solo movilidad. nutrition_alert level:"danger".');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 8: RENDIMIENTO + BIEN CARGADO
+  // ════════════════════════════════════════════════════════════════════════
+  else if (wantsPerformance && carbPct >= 0.6 && protPct >= 0.6) {
+    adaptRules.push('✅ RENDIMIENTO + CARGA NUTRICIONAL ÓPTIMA: Glucógeno y proteína disponibles. Genera sesión de alta intensidad (velocidad, potencia, intervalos). FC puede llegar a zona 4-5 en bloques cortos.');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 9: PERFIL CETOGÉNICO / MUY BAJA EN HC
+  // ════════════════════════════════════════════════════════════════════════
+  else if (fat > 60 && carbs < 50) {
+    adaptRules.push('🫒 PERFIL CETOGÉNICO (alta grasa, bajos HC): El cuerpo opera con cetonas. Genera fuerza de baja-media intensidad o cardio aeróbico largo zona 2. El metabolismo anaeróbico (HIIT, sprint, pesos máximos) NO funciona bien sin glucógeno. Duración máx 45 min.');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 10: DÉFICIT MODERADO (30-60% calorías)
+  // ════════════════════════════════════════════════════════════════════════
+  else if (kcalPct < 0.60) {
+    adaptRules.push('⚠ DÉFICIT CALÓRICO MODERADO (30-60% objetivo): Reduce volumen un 20-25%. Evita entrenos de destrucción máxima. Prioriza calidad sobre cantidad. Descansa más entre series.');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 11: AZÚCAR ALTO (digestión activa/pico glucémico)
+  // ════════════════════════════════════════════════════════════════════════
+  else if (sugar > 60 && kcalPct > 0.5) {
+    adaptRules.push('💡 INGESTA ALTA DE AZÚCAR SIMPLE (>60g): Puede haber pico de insulina activo. Genera cardio moderado o fuerza estándar. Evita ejercicios abdominales intensos si la última comida fue hace <1h.');
+  }
+  // ════════════════════════════════════════════════════════════════════════
+  // ESCENARIO 12: NUTRICIÓN EQUILIBRADA — SITUACIÓN ÓPTIMA
+  // ════════════════════════════════════════════════════════════════════════
+  else if (kcalPct >= 0.5 && kcalPct <= 1.1 && carbPct >= 0.4) {
+    adaptRules.push('✅ NUTRICIÓN EQUILIBRADA: Macros y calorías en rango aceptable. Genera el entreno según nivel y deporte sin restricciones nutricionales adicionales.');
   }
 
   if (adaptRules.length) {
-    rules.push(...adaptRules);
-    rules.push('  ↳ Usa estos datos para ajustar intensidad, volumen y tipo de ejercicios. Menciona en ai_coaching_tip la relación entre la nutrición de hoy y el entreno.');
+    lines.push('', ...adaptRules);
+    lines.push('', '  ↳ INSTRUCCIÓN CLAVE: El campo "why_this_workout" DEBE explicar en 2-3 frases por qué este entreno específico es el adecuado dado el estado nutricional y el objetivo del usuario. El campo "post_workout_advice" DEBE dar consejos de comida concretos con alimentos, cantidades y timing post-entreno alineados con el objetivo.');
   }
 
-  return rules.join('\n');
+  return lines.join('\n');
 }
 
 /**
@@ -263,7 +319,16 @@ Responde ÚNICAMENTE con JSON válido sin texto adicional:
   "ai_coaching_tip": "string personalizado 1-2 frases",
   "estimated_duration": "string",
   "difficulty": "${resolvedLevel}",
-  "summary": "string motivador 1-2 frases"
+  "summary": "string motivador 1-2 frases",
+  "why_this_workout": "string — explica en 2-3 frases CONCRETAS por qué este entreno específico es el adecuado hoy dado el estado nutricional, físico y el objetivo del usuario. Si no hay sinergia activa, explica solo en base a nivel y deporte.",
+  "nutrition_alert": null,
+  "post_workout_advice": {
+    "timing": "string — ej: 'Primeros 30 minutos post-entreno'",
+    "explanation": "string — por qué estos alimentos específicamente dada la sesión de hoy y el objetivo",
+    "foods": [
+      {"name": "string", "quantity": "string", "reason": "string — qué aporta este alimento ahora"}
+    ]
+  }
 }
 
 REGLAS:
@@ -271,9 +336,12 @@ REGLAS:
 - strength_block puede ser null
 - time_cap OBLIGATORIO en For Time, Chipper, Hero WOD. null para AMRAP y EMOM.
 - WOD con 3-5 movimientos máximo
-- SIEMPRE incluir scaling para los 3 niveles`;
+- SIEMPRE incluir scaling para los 3 niveles
+- why_this_workout: OBLIGATORIO, siempre explica el razonamiento del entreno de hoy
+- nutrition_alert: null si todo está bien; {"level":"danger|warning|info","title":"string","message":"string explicativo de 1-2 frases"} si hay desajuste nutricional
+- post_workout_advice: siempre con 2-4 alimentos específicos, cantidades reales y razón nutricional`;
 
-    return chat(system, `Genera el WOD de CrossFit de hoy.\n\n${userCtx}`, 2000);
+    return chat(system, `Genera el WOD de CrossFit de hoy.\n\n${userCtx}`, 2500);
   }
 
   // ── Otros deportes: plan de entrenamiento genérico ───────────────────────────
@@ -315,19 +383,30 @@ Responde ÚNICAMENTE con JSON válido sin texto adicional:
   "ai_coaching_tip": "string — consejo personalizado 1-2 frases",
   "estimated_duration": "string (ej: '60 min')",
   "difficulty": "${resolvedLevel}",
-  "summary": "string motivador 1-2 frases"
+  "summary": "string motivador 1-2 frases",
+  "why_this_workout": "string — explica en 2-3 frases CONCRETAS por qué este entreno específico es el adecuado hoy dado el estado nutricional, físico y el objetivo. Si no hay sinergia activa, explica solo en base a nivel y deporte.",
+  "nutrition_alert": null,
+  "post_workout_advice": {
+    "timing": "string — ej: 'Primeros 30 minutos post-entreno'",
+    "explanation": "string — por qué estos alimentos específicamente dada la sesión de hoy y el objetivo",
+    "foods": [
+      {"name": "string", "quantity": "string", "reason": "string — qué aporta este alimento ahora"}
+    ]
+  }
 }
 
 REGLAS:
 - Foco en ${sportHint}
 - difficulty DEBE ser exactamente "${resolvedLevel}"
 - exercises: 4-7 ejercicios relevantes para ${activeSport}
-- Adaptar al check-in del usuario (físico bajo → menos intensidad, físico alto → más)
 - warmup específico para los músculos y movimientos del ${activeSport}
 - stretching post-sesión de los músculos más trabajados
-- NO generes CrossFit ni WODs — genera entrenamiento de ${activeSport}`;
+- NO generes CrossFit ni WODs — genera entrenamiento de ${activeSport}
+- why_this_workout: OBLIGATORIO — explica siempre el razonamiento del entreno de hoy
+- nutrition_alert: null si todo bien; {"level":"danger|warning|info","title":"string","message":"string de 1-2 frases"} si hay desajuste
+- post_workout_advice: 2-4 alimentos con cantidad real y razón nutricional concreta`;
 
-  return chat(system, `Genera la sesión de ${activeSport} de hoy.\n\n${userCtx}`, 2000);
+  return chat(system, `Genera la sesión de ${activeSport} de hoy.\n\n${userCtx}`, 2500);
 }
 
 module.exports = { generateWorkout };

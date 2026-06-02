@@ -120,6 +120,10 @@ async function generateAndSave({ userId, level, checkin, sport }) {
     stretching: plan.stretching,
     summary: plan.summary,
     estimated_duration: plan.estimated_duration || null,
+    // Nuevos campos de contexto y consejos post-entreno
+    why_this_workout:    plan.why_this_workout    || null,
+    nutrition_alert:     plan.nutrition_alert     || null,
+    post_workout_advice: plan.post_workout_advice || null,
     diet_safety_warning: dietWarning,
   };
 }
