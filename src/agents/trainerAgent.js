@@ -6,19 +6,39 @@ const { chat } = require('./client');
 // ─────────────────────────────────────────────────────────────────────────────
 function buildSessionRules(sport, profile = {}, checkin = {}) {
   const rules = [];
+  const ctx   = checkin.context || '';
+  const phys  = (checkin.physicalState || 'Normal').toLowerCase();
 
-  // ── DURACIÓN ─────────────────────────────────────────────────────────────
-  // Primero el check-in "poco tiempo" (override del perfil si hay conflicto)
-  const pocoCT = checkin.context === 'poco_tiempo';
+  // ── DURACIÓN EFECTIVA ─────────────────────────────────────────────────────
+  // Lógica de prioridad:
+  //  1. poco_tiempo  → cap 20 min  (siempre override)
+  //  2. mal_descanso → cap 30 min  (si el perfil dice más)
+  //  3. molestias    → cap 30 min
+  //  4. físico bajo  → cap 30 min  (no tiene sentido sesión larga con cuerpo bajo)
+  //  5. perfil del deporte (session_duration)
+  //  6. sin dato     → la IA elige según deporte/nivel
 
-  const dur = pocoCT ? '20 min' : (profile.session_duration || null);
-  if (dur === '20 min' || pocoCT) {
-    rules.push('⏱ DURACIÓN MÁXIMA 20 MIN. Sin bloque de fuerza. Calentamiento ≤3 min. WOD/circuito ≤15 min. Máximo 3 ejercicios principales. Stretching 2 min.');
-  } else if (dur === '30 min') {
-    rules.push('⏱ DURACIÓN: 30 min. Calentamiento 5 min. Bloque principal 20 min (bloque fuerza corto O WOD, no ambos). Stretching 5 min. Máximo 4 ejercicios.');
-  } else if (dur === '45 min') {
-    rules.push('⏱ DURACIÓN: 45 min. Calentamiento 8 min. Bloque fuerza + WOD estándar. Stretching 7 min.');
-  } else if (dur === '60 min+') {
+  const profileDur = profile.session_duration || null;
+  const durMinutes = profileDur === '20 min' ? 20
+                   : profileDur === '30 min' ? 30
+                   : profileDur === '45 min' ? 45
+                   : profileDur === '60 min+' ? 60
+                   : null;
+
+  let effectiveMin = durMinutes; // puede ser null si no configurado
+
+  if (ctx === 'poco_tiempo')  effectiveMin = Math.min(effectiveMin ?? 20, 20);
+  if (ctx === 'mal_descanso') effectiveMin = Math.min(effectiveMin ?? 30, 30);
+  if (ctx === 'molestias')    effectiveMin = Math.min(effectiveMin ?? 30, 30);
+  if (phys === 'bajo' || phys === 'low') effectiveMin = Math.min(effectiveMin ?? 30, 30);
+
+  if (effectiveMin === 20) {
+    rules.push('⏱ DURACIÓN MÁXIMA 20 MIN. Calentamiento ≤3 min. Bloque principal ≤13 min (sin bloque de fuerza, máx 3 ejercicios). Stretching ≤4 min. NO superar este tiempo bajo ningún concepto.');
+  } else if (effectiveMin === 30) {
+    rules.push('⏱ DURACIÓN: 30 min. Calentamiento 5 min. Bloque principal 20 min (fuerza corta O cardio, no ambos completos). Stretching 5 min. Máximo 4 ejercicios.');
+  } else if (effectiveMin === 45) {
+    rules.push('⏱ DURACIÓN: 45 min. Calentamiento 8 min. Bloque fuerza + cardio/WOD estándar. Stretching 7 min.');
+  } else if (effectiveMin === 60) {
     rules.push('⏱ DURACIÓN: 60+ min. Sesión completa: calentamiento 10 min + bloque fuerza + WOD largo + stretching 10 min.');
   }
 
@@ -51,19 +71,18 @@ function buildSessionRules(sport, profile = {}, checkin = {}) {
   }
 
   // ── CHECK-IN: ESTADO FÍSICO ───────────────────────────────────────────────
-  const phys = (checkin.physicalState || 'Normal').toLowerCase();
   if (phys === 'bajo' || phys === 'low') {
-    rules.push('🔴 ESTADO FÍSICO BAJO: reduce volumen e intensidad un 40%. Evita saltos y carga máxima. Prioriza técnica y movilidad. Si hay molestias, elimina el ejercicio que las cause.');
+    rules.push('🔴 ESTADO FÍSICO BAJO: intensidad −40%, volumen −40%. Evita saltos y carga máxima. Sustituye ejercicios explosivos por variantes de baja intensidad. Prioriza técnica y movilidad.');
   } else if (phys === 'alto' || phys === 'high') {
     rules.push('🟢 ESTADO FÍSICO ALTO: puedes subir intensidad. Añade 1 set extra o aumenta carga un 5-10%.');
   }
 
   // ── CHECK-IN: CONTEXTO ────────────────────────────────────────────────────
-  if (checkin.context === 'mal_descanso') {
-    rules.push('😴 MAL DESCANSO: reduce volumen 30%. Nada de movimientos olímpicos pesados. Foco en calidad de movimiento, no en intensidad.');
+  if (ctx === 'mal_descanso') {
+    rules.push('😴 MAL DESCANSO: volumen −30%, intensidad −20%. PROHIBIDO movimientos olímpicos pesados (Clean, Snatch, Jerk). Foco en calidad de movimiento. Evita ejercicios de equilibrio complejo. Prioriza aeróbico suave o fuerza de bajo impacto.');
   }
-  if (checkin.context === 'molestias') {
-    rules.push('🤕 MOLESTIAS: solo ejercicios de bajo impacto. Nada de saltos, nada de cargas altas. Ofrece siempre alternativa de bajo impacto para cada ejercicio.');
+  if (ctx === 'molestias') {
+    rules.push('🤕 MOLESTIAS: SOLO ejercicios de bajo impacto. Sin saltos, sin cargas ≥50% RM, sin sprint. Para CADA ejercicio que incluyas, añade en "tips" una alternativa de bajo impacto. Prioriza movilidad y ejercicios unilaterales.');
   }
 
   // ── CROSSFIT: 1RM para sugerencias de peso ────────────────────────────────
@@ -90,6 +109,79 @@ function buildSessionRules(sport, profile = {}, checkin = {}) {
     : '';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// buildMealRules — solo cuando synergy está activa
+// Calcula macros consumidos hoy vs targets del usuario y genera reglas de
+// intensidad y tipo de ejercicio acordes a la disponibilidad energética real.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildMealRules(user, mealContext, synergy) {
+  if (!synergy || !mealContext || !mealContext.length) return '';
+
+  // Sumar macros de todas las comidas del día
+  let kcal = 0, carbs = 0, protein = 0, fat = 0;
+  for (const meal of mealContext) {
+    const ni = meal.nutritional_info || {};
+    kcal    += Number(ni.total_calories) || 0;
+    carbs   += Number(ni.total_carbs)    || 0;
+    protein += Number(ni.total_protein)  || 0;
+    fat     += Number(ni.total_fat)      || 0;
+  }
+  if (kcal === 0 && carbs === 0 && protein === 0) return '';
+
+  // Targets del usuario (si los tiene configurados)
+  const tKcal    = Number(user.calories_target) || 0;
+  const tProtein = Number(user.protein_target)  || 0;
+  const tCarbs   = Number(user.carbs_target)    || 0;
+  const goal     = (user.goal || '').toLowerCase();
+
+  const rules = [`\n\n🍽 CONTEXTO NUTRICIONAL DE HOY (sinergia activa — adaptar entreno en consecuencia):`];
+  rules.push(`  Consumido hasta ahora: ${Math.round(kcal)} kcal | ${Math.round(carbs)}g HC | ${Math.round(protein)}g prot | ${Math.round(fat)}g grasa`);
+  if (tKcal)    rules.push(`  Objetivo calórico diario: ${tKcal} kcal`);
+  if (tProtein) rules.push(`  Objetivo proteína: ${tProtein}g`);
+
+  const adaptRules = [];
+
+  // ── GLUCÓGENO / CARBOHIDRATOS ─────────────────────────────────────────────
+  const carbPct = tCarbs > 0 ? carbs / tCarbs : null;
+  if (carbs < 50) {
+    adaptRules.push('⚠ GLUCÓGENO BAJO (<50g HC consumidos): EVITA HIIT de máxima intensidad y WODs metabólicos puros. Prioriza trabajo de fuerza o cardio aeróbico zona 2. Riesgo de hipoglucemia en esfuerzos anaeróbicos prolongados.');
+  } else if (carbs >= 100 || (carbPct !== null && carbPct >= 0.6)) {
+    adaptRules.push('✅ BUENA DISPONIBILIDAD DE GLUCÓGENO: ideal para sesiones de alta intensidad, HIIT o WODs metabólicos. Puedes generar el entreno a intensidad normal o superior.');
+  } else {
+    adaptRules.push('🟡 HC MODERADOS: intensidad media. Evita series muy largas de cardio máximo; prioriza fuerza o circuitos moderados.');
+  }
+
+  // ── CALORÍAS TOTALES ──────────────────────────────────────────────────────
+  const kcalPct = tKcal > 0 ? kcal / tKcal : null;
+  if (kcalPct !== null && kcalPct < 0.30) {
+    adaptRules.push('⚠ DÉFICIT CALÓRICO SEVERO (menos del 30% del objetivo consumido): REDUCE intensidad un 30%. Evita entrenos de alta demanda energética. Riesgo de mareo o pérdida de rendimiento.');
+  } else if (kcalPct !== null && kcalPct > 1.1) {
+    adaptRules.push('📈 SUPERÁVIT CALÓRICO (más del 110% del objetivo): ideal para sesiones de volumen alto y trabajo de fuerza/hipertrofia. Aprovecha para añadir sets.');
+  }
+
+  // ── PROTEÍNA ──────────────────────────────────────────────────────────────
+  const protPct = tProtein > 0 ? protein / tProtein : null;
+  if (goal.includes('músculo') || goal.includes('volumen') || goal.includes('fuerza')) {
+    if (protPct !== null && protPct >= 0.6) {
+      adaptRules.push('💪 BUENA INGESTA PROTEICA + OBJETIVO FUERZA/MÚSCULO: prioriza trabajo de fuerza e hipertrofia hoy. Las proteínas disponibles apoyarán la síntesis muscular post-entreno.');
+    } else if (protPct !== null && protPct < 0.4) {
+      adaptRules.push('⚠ PROTEÍNA BAJA + OBJETIVO FUERZA: evita volumen excesivo de destrucción muscular. Sesión técnica o de fuerza moderada. Recomienda en ai_coaching_tip que coma proteína antes/después del entreno.');
+    }
+  }
+
+  // ── GRASA ALTA ────────────────────────────────────────────────────────────
+  if (fat > 60 && carbs < 80) {
+    adaptRules.push('🫒 ALTA INGESTA DE GRASA + HC BAJOS: perfil cetogénico / ayuno. Evita HIIT y metabolismo anaeróbico. Fuerza lenta o cardio aeróbico bajo son los más adecuados.');
+  }
+
+  if (adaptRules.length) {
+    rules.push(...adaptRules);
+    rules.push('  ↳ Usa estos datos para ajustar intensidad, volumen y tipo de ejercicios. Menciona en ai_coaching_tip la relación entre la nutrición de hoy y el entreno.');
+  }
+
+  return rules.join('\n');
+}
+
 /**
  * Trainer Agent — multi-sport
  * CrossFit: WODs adaptativos (AMRAP, EMOM, For Time…)
@@ -101,6 +193,8 @@ async function generateWorkout({ user, history, level, synergy, mealContext, che
 
   // Reglas derivadas del perfil + check-in (duración, material, estilo, estado)
   const sessionRules = buildSessionRules(activeSport, sportProfile || {}, checkin || {});
+  // Reglas nutricionales solo cuando sinergia está activa
+  const mealRules = buildMealRules(user, mealContext, synergy);
 
   const checkinCtx = checkin ? [
     `Check-in pre-entreno:`,
@@ -114,10 +208,6 @@ async function generateWorkout({ user, history, level, synergy, mealContext, che
         `- ${h.date}: ${h.sport || 'entreno'} | ${h.exercises?.map(e => e.name).join(', ') || ''} | nivel: ${h.difficulty || '?'}`
       ).join('\n')}`
     : 'Primera sesión registrada. Empezar con moderación, priorizar técnica.';
-
-  const synergyCtx = synergy && mealContext && mealContext.length
-    ? `Ingesta hoy: ${JSON.stringify(mealContext.map(m => ({ kcal: m.nutritional_info?.total_calories, prot: m.nutritional_info?.total_protein })))}`
-    : '';
 
   const profileCtx = sportProfile
     ? `Perfil de ${activeSport}: ${JSON.stringify(sportProfile)}`
@@ -135,7 +225,7 @@ async function generateWorkout({ user, history, level, synergy, mealContext, che
 
   // ── CrossFit: prompt específico con WOD ──────────────────────────────────────
   if (activeSport === 'CrossFit') {
-    const system = `Eres un coach CrossFit CF-L2. Genera WODs adaptativos, seguros y progresivos.${sessionRules}
+    const system = `Eres un coach CrossFit CF-L2. Genera WODs adaptativos, seguros y progresivos.${sessionRules}${mealRules}
 
 Responde ÚNICAMENTE con JSON válido sin texto adicional:
 {
@@ -204,7 +294,7 @@ REGLAS:
   };
   const sportHint = sportTips[activeSport] || `sesión de ${activeSport}: ejercicios específicos del deporte, calentamiento y vuelta a la calma`;
 
-  const system = `Eres un preparador físico especialista en ${activeSport}. Genera una sesión de entrenamiento adaptada al nivel ${resolvedLevel}.${sessionRules}
+  const system = `Eres un preparador físico especialista en ${activeSport}. Genera una sesión de entrenamiento adaptada al nivel ${resolvedLevel}.${sessionRules}${mealRules}
 
 Responde ÚNICAMENTE con JSON válido sin texto adicional:
 {
