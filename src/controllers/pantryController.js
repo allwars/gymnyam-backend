@@ -13,8 +13,19 @@ async function getAll(req, res) {
 async function addItem(req, res) {
   try {
     const userId = Number(req.params.userId);
-    const item = await pantryService.addItem(userId, req.body);
-    res.status(201).json({ ok: true, item });
+    const result = await pantryService.addItem(userId, req.body);
+
+    // Producto ya existe en la despensa del usuario
+    if (result?.duplicate) {
+      return res.status(409).json({
+        ok: false,
+        duplicate: true,
+        existing_item: result.existing_item,
+        error: 'duplicate',
+      });
+    }
+
+    res.status(201).json({ ok: true, item: result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

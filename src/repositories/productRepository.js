@@ -30,7 +30,40 @@ async function getByBarcode(barcode) {
     .select('*')
     .eq('barcode', barcode)
     .single();
-  return data || null;
+  if (!data) return null;
+
+  // Calcular score si no está almacenado (productos del import masivo)
+  const ni = data.nutritional_info || {};
+  if (ni.score == null && ni.calories_per_100g) {
+    const nova       = ni.off_nova;
+    const nutriscore = ni.off_nutriscore;
+    const protein    = ni.protein_per_100g  || 0;
+    const fiber      = ni.fiber_per_100g    || 0;
+    const sugar      = ni.sugar_per_100g    || 0;
+    const fat        = ni.fat_per_100g      || 0;
+    const calories   = ni.calories_per_100g || 0;
+    const hasPreserv = ni.has_preservatives ||
+      (ni.off_ecodes?.some(e => /^E2\d\d$/i.test(e)) ?? false);
+
+    let base = nova === 1 ? 88 : nova === 2 ? 72 : nova === 3 ? 52 : nova === 4 ? 28 : 62;
+    if (protein > 20)       base = Math.min(base + 5, 100);
+    if (fiber > 5)          base = Math.min(base + 4, 100);
+    if (sugar > 20)         base = Math.max(base - 10, 0);
+    if (calories > 400)     base = Math.max(base - 5,  0);
+    if (hasPreserv)         base = Math.max(base - 8,  0);
+    if (nutriscore === 'A') base = Math.min(base + 6, 100);
+    if (nutriscore === 'B') base = Math.min(base + 3, 100);
+    if (nutriscore === 'D') base = Math.max(base - 5,  0);
+    if (nutriscore === 'E') base = Math.max(base - 10, 0);
+
+    const score = Math.round(base);
+    const score_label = score >= 80 ? 'Excelente' : score >= 65 ? 'Bueno'
+                      : score >= 45 ? 'Aceptable' : 'Limitado';
+
+    data.nutritional_info = { ...ni, score, score_label, has_preservatives: hasPreserv };
+  }
+
+  return data;
 }
 
 async function addProduct(data) {
