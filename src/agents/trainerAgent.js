@@ -276,7 +276,6 @@ async function generateWorkout({ user, history, level, synergy, mealContext, che
     profileCtx,
     checkinCtx,
     historyCtx,
-    synergyCtx,
   ].filter(Boolean).join('\n\n');
 
   // ── CrossFit: prompt específico con WOD ──────────────────────────────────────
